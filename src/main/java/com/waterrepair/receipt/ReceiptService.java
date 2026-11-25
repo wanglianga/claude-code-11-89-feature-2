@@ -6,6 +6,7 @@ import com.waterrepair.dispatch.AssignmentRepository;
 import com.waterrepair.dispatch.OccupancyService;
 import com.waterrepair.incident.Incident;
 import com.waterrepair.incident.IncidentRepository;
+import com.waterrepair.material.MaterialAcceptanceService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,17 +25,20 @@ public class ReceiptService {
     private final AssignmentRepository assignmentRepo;
     private final OccupancyService occupancyService;
     private final PressureVerificationService verificationService;
+    private final MaterialAcceptanceService materialAcceptanceService;
 
     public ReceiptService(FieldReceiptRepository receiptRepo,
                           IncidentRepository incidentRepo,
                           AssignmentRepository assignmentRepo,
                           OccupancyService occupancyService,
-                          PressureVerificationService verificationService) {
+                          PressureVerificationService verificationService,
+                          MaterialAcceptanceService materialAcceptanceService) {
         this.receiptRepo = receiptRepo;
         this.incidentRepo = incidentRepo;
         this.assignmentRepo = assignmentRepo;
         this.occupancyService = occupancyService;
         this.verificationService = verificationService;
+        this.materialAcceptanceService = materialAcceptanceService;
     }
 
     @Transactional
@@ -165,6 +169,9 @@ public class ReceiptService {
                     Map.of("verificationStatus", last.getVerificationStatus(),
                             "reasons", last.getVerificationReasons()));
         }
+
+        // 安装了材料却没有竣工验收依据 → 不能关单（验收把批次关联到管段）
+        materialAcceptanceService.assertAcceptableBeforeClose(incidentId);
 
         incident.setStatus("CLOSED");
         incident.setClosedAt(OffsetDateTime.now());

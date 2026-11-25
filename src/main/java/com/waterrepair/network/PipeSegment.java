@@ -35,6 +35,22 @@ public class PipeSegment {
     @Column(nullable = false)
     private Integer pressureTimeToleranceSeconds;
 
+    /** 管段的设计口径 DN；维修方案计算的管径以此为准。 */
+    @Column(nullable = false)
+    private Integer designDn = 100;
+
+    /** 管段材质（如 DUCTILE_IRON / STEEL / PE）。 */
+    @Column(nullable = false, length = 32)
+    private String material = "DUCTILE_IRON";
+
+    /** 既有管段连接方式（FLANGE / GROOVED / COMPRESSION / WELD）。 */
+    @Column(nullable = false, length = 24)
+    private String connectionType = "FLANGE";
+
+    /** 管段额定压力 PN。 */
+    @Column(nullable = false)
+    private Integer designPn = 16;
+
     public PipeSegment() {
     }
 
@@ -76,5 +92,28 @@ public class PipeSegment {
 
     public Integer getPressureTimeToleranceSeconds() {
         return pressureTimeToleranceSeconds;
+    }
+
+    public Integer getDesignDn() {
+        return designDn;
+    }
+
+    public String getMaterial() {
+        return material;
+    }
+
+    public String getConnectionType() {
+        return connectionType;
+    }
+
+    public Integer getDesignPn() {
+        return designPn;
+    }
+
+    public void setDesignSpec(Integer designDn, String material, String connectionType, Integer designPn) {
+        this.designDn = designDn == null ? 100 : designDn;
+        this.material = material == null ? "DUCTILE_IRON" : material;
+        this.connectionType = connectionType == null ? "FLANGE" : connectionType;
+        this.designPn = designPn == null ? 16 : designPn;
     }
 }

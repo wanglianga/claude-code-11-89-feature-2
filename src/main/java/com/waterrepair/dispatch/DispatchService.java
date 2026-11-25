@@ -5,6 +5,7 @@ import com.waterrepair.incident.Incident;
 import com.waterrepair.incident.IncidentRepository;
 import com.waterrepair.incident.IsolationPlan;
 import com.waterrepair.incident.IsolationPlanRepository;
+import com.waterrepair.material.MaterialService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,19 +22,22 @@ public class DispatchService {
     private final EligibilityService eligibilityService;
     private final IncidentRepository incidentRepo;
     private final IsolationPlanRepository planRepo;
+    private final MaterialService materialService;
 
     public DispatchService(AssignmentRepository assignmentRepo,
                            ResourceOccupancyRepository occupancyRepo,
                            OccupancyService occupancyService,
                            EligibilityService eligibilityService,
                            IncidentRepository incidentRepo,
-                           IsolationPlanRepository planRepo) {
+                           IsolationPlanRepository planRepo,
+                           MaterialService materialService) {
         this.assignmentRepo = assignmentRepo;
         this.occupancyRepo = occupancyRepo;
         this.occupancyService = occupancyService;
         this.eligibilityService = eligibilityService;
         this.incidentRepo = incidentRepo;
         this.planRepo = planRepo;
+        this.materialService = materialService;
     }
 
     @Transactional(readOnly = true)
@@ -105,6 +109,8 @@ public class DispatchService {
         a.setCode(String.format("ASG-%04d", a.getId()));
 
         reserveRepairResources(a, elig);
+        // 发车（下达）前物料必须确定且合格：CATEGORY 粒度在此刻按当时的合格库存挑批次
+        materialService.assertReadyForVehicle(incident, a, operator);
 
         incident.setStatus(holdOnly ? "REPAIR_RESERVED" : "REPAIR_DISPATCHED");
         incidentRepo.save(incident);
@@ -158,6 +164,8 @@ public class DispatchService {
         a.setCode(String.format("ASG-%04d", a.getId()));
 
         reserveRepairResources(a, elig);
+        // 重新派工也需要物料确定/重挑批次（若上次批次被召回/方案变更，旧配料已被释放）
+        materialService.assertReadyForVehicle(incident, a, operator);
 
         incident.setStatus("REPAIR_DISPATCHED");
         incidentRepo.save(incident);
@@ -179,12 +187,15 @@ public class DispatchService {
     }
 
     @Transactional
-    public Assignment issue(Long assignmentId) {
+    public Assignment issue(Long assignmentId, String operator) {
         Assignment a = mustGetAssignment(assignmentId);
         if (!"PROVISIONAL".equals(a.getStatus())) {
             throw ApiException.conflict("ASSIGNMENT_NOT_PROVISIONAL",
                     "只有 PROVISIONAL 暂留派工单可以下达，当前状态: " + a.getStatus(), null);
         }
+        Incident incident = mustGetIncident(a.getIncidentId());
+        // 暂留 → 正式发车：再次确认物料确定且合格（期间可能被召回/方案变更）
+        materialService.assertReadyForVehicle(incident, a, operator);
         a.setStatus("DISPATCHED");
         return assignmentRepo.save(a);
     }

@@ -120,6 +120,7 @@ def main():
         sys.exit(2)
 
     reports_doc = json.loads((SAMPLE_DIR / "reports.json").read_text(encoding="utf-8"))
+    orders = json.loads((SAMPLE_DIR / "material-repair-orders.json").read_text(encoding="utf-8"))
     receipt_tpls = json.loads(
         (SAMPLE_DIR / "field-receipt-templates.json").read_text(encoding="utf-8"))["templates"]
 
@@ -143,6 +144,10 @@ def main():
     st, doc = http("GET", "/v3/api-docs")
     check("OpenAPI 3.x 文档 /v3/api-docs 可匿名访问且含接口定义",
           st == 200 and "/api/incidents" in json.dumps(doc), f"status={st}")
+    check("OpenAPI 含材料/仓库接口（配料/扫码/召回/验收）",
+          "/api/incidents/{id}/repair-plans" in json.dumps(doc)
+          and "/api/materials/batches" in json.dumps(doc)
+          and "/api/materials/recalls" in json.dumps(doc), "material paths missing")
     try:
         with urllib.request.urlopen(BASE + "/swagger-ui/index.html", timeout=10) as r:
             check("Swagger UI /swagger-ui/index.html 可访问", r.status == 200)
@@ -631,16 +636,611 @@ def main():
     check("PR-S2-OK 区间与校时容差均通过 → PASSED",
           vok["verificationStatus"] == "PASSED", vok)
 
-    # ---------- 14. 终态：所有占用均已释放 ----------
-    section("14. 终态核对：所有资源占用 RELEASED，三个事故 CLOSED")
+
+    # ---------- 15. 材料/仓库：需求 → 配料 → 扫码 → 召回 → 验收 ----------
+    section("15. 维修方案材料需求：口径/材质/连接/额定压力传给仓库；缺料不得同系列顶替")
+    wh_token = login("warehouse", "Ware@12345")
+    check("仓库材料员账号可登录", bool(wh_token))
+
+    st, batches = http("GET", "/api/materials/batches", token=wh_token, expect=200)
+    batch_by_no = {b["batchNo"]: b for b in batches}
+    check("仓库有足量 DN100/PN16 管材与 DN80/PN10 管材两种规格",
+          batch_by_no["PIPE-DN100-PN16-Q1"]["issuableQty"] >= 2
+          and batch_by_no["PIPE-DN80-PN10-Q1"]["issuableQty"] >= 2
+          and batch_by_no["SEAL-DN100-PN16-Q1"]["issuableQty"] >= 2, batches)
+    check("DN100/PN10 外形相似件存在但不满足 PN16（paramKey 可核对等价性）",
+          batch_by_no["PIPE-DN100-PN10-X"]["qualified"] is True
+          and batch_by_no["PIPE-DN100-PN10-X"]["paramKey"] == "DN100/DUCTILE_IRON/FLANGE/PN10")
+
+    # 缺料探针：需求 PN16 但仓库只剩 PN10 时，不得自动顶替
+    _, probe_report = http("POST", "/api/reports", {
+        "hotlineCallId": "HC-20261127-1999", "callerPhone": "13900001999",
+        "rawAddress": "幸福路1号", "description": "缺料探针报修",
+        "receivedAt": "2026-11-27T07:50:00+08:00"}, token=disp, expect=200)
+    _, probe_inc = http("POST", "/api/incidents",
+                        {"title": "缺料探针（PN16 需求 vs 仅 PN10 库存）",
+                         "reportIds": [probe_report["report"]["id"]],
+                         "boundarySegmentCodes": ["S2"]}, token=disp, expect=200)
+    st, probe = http("POST", f"/api/incidents/{probe_inc['id']}/repair-plans",
+                     {"lines": orders["shortageProbe"]["lines"], "granularity": "BATCH",
+                      "approve": True, "note": "缺料探针"}, token=disp)
+    check("缺料时返回 409 MATERIAL_SHORTAGE 而非用 PN10 顶 PN16",
+          st == 409 and probe["code"] == "MATERIAL_SHORTAGE", (st, probe))
+    nm = probe["details"]["nearMatches"]
+    check("缺料详情列出近似件 PIPE-DN100-PN10-X 且标明压力等级不符",
+          any(m["batchNo"] == orders["shortageProbe"]["expectNearMatchBatch"]
+              and any("PN" in x for x in m["mismatches"]) for m in nm), nm)
+
+    # ---------- 16. 两张维修单：方案变更（现场 DN100→DN80/PN10） ----------
+    section("16. 维修单 M1：BATCH 粒度获批锁批次；现场改口径后释放旧件并重做配料")
+    m1 = orders["pipePlanChange"]
+    _, r_m1 = http("POST", "/api/reports", m1["report"], token=disp, expect=200)
+    rid_m1 = r_m1["report"]["id"]
+    _, inc_m1 = http("POST", "/api/incidents",
+                     {"title": m1["title"], "reportIds": [rid_m1],
+                      "boundarySegmentCodes": m1["boundary"]}, token=disp, expect=200)
+    m1id = inc_m1["id"]
+    http("POST", f"/api/incidents/{m1id}/isolation-plans",
+         {"valveCodes": m1["valveCodes"]}, token=disp, expect=200)
+
+    st, plan1 = http("POST", f"/api/incidents/{m1id}/repair-plans",
+                     {"lines": m1["v1Lines"], "granularity": "BATCH", "approve": True,
+                      "preferredBatchNo": m1["preferredSealBatch"],
+                      "note": "原估算 DN100/PN16，仓库按此配料"}, token=disp)
+    _, pv1_before = http("GET", f"/api/incidents/{m1id}/material-provision", token=wh_token, expect=200)
+    check("方案 v1 获批即锁定具体合格批次（BATCH 粒度）",
+          st == 200 and plan1["provision"]["status"] == "LOCKED"
+          and plan1["provision"]["granularity"] == "BATCH"
+          and pv1_before["reveal"]["hasConcreteBatch"] is True, (st, plan1))
+    _, pv1 = http("GET", f"/api/incidents/{m1id}/material-provision", token=wh_token, expect=200)
+    check("v1 配料单已给出具体锁定的 DN100 批次与 DN100 密封件批次",
+          pv1["reveal"]["hasConcreteBatch"] is True
+          and "PIPE-DN100-PN16-Q1" in pv1["reveal"]["lockedBatches"]
+          and "SEAL-DN100-PN16-Q1" in pv1["reveal"]["lockedBatches"], pv1["reveal"])
+    check("v1 配料时 DN100 密封件批次被加锁（quantityLocked ≥ 2）",
+          next(b for b in http("GET", "/api/materials/batches", token=wh_token)[1]
+               if b["batchNo"] == m1["preferredSealBatch"])["quantityLocked"] >= 2)
+
+    # ---------- 16b. 同场景 CATEGORY 粒度对照：方案变更只需改参数类别，装车时再挑批次 ----------
+    section("16b. 对照 CATEGORY 粒度：方案变更后旧件自释放，装车前才落具体批次")
+    _, r_cat = http("POST", "/api/reports", {
+        "hotlineCallId": "HC-20261127-1998", "callerPhone": "13900001998",
+        "rawAddress": "幸福路4号", "description": "S2 对照单：CATEGORY 粒度方案变更",
+        "receivedAt": "2026-11-27T07:55:00+08:00"}, token=disp, expect=200)
+    _, inc_cat = http("POST", "/api/incidents",
+                      {"title": "S2 CATEGORY 粒度方案变更对照单",
+                       "reportIds": [r_cat["report"]["id"]], "boundarySegmentCodes": ["S2"]},
+                      token=disp, expect=200)
+    catid = inc_cat["id"]
+    http("POST", f"/api/incidents/{catid}/isolation-plans", {"valveCodes": ["V2"]}, token=disp, expect=200)
+    _, cat_v1 = http("POST", f"/api/incidents/{catid}/repair-plans",
+                     {"lines": m1["v1Lines"], "granularity": "CATEGORY", "approve": True,
+                      "note": "CATEGORY v1：原估 DN100/PN16"}, token=disp, expect=200)
+    _, pv_cat_v1 = http("GET", f"/api/incidents/{catid}/material-provision", token=wh_token, expect=200)
+    check("CATEGORY v1 获批时只锁参数类别，不出现具体批次",
+          cat_v1["provision"]["granularity"] == "CATEGORY"
+          and not pv_cat_v1["reveal"]["hasConcreteBatch"], pv_cat_v1["reveal"])
+    _, cat_v2 = http("POST", f"/api/incidents/{catid}/repair-plans",
+                     {"lines": m1["v2Lines"], "granularity": "CATEGORY", "approve": True,
+                      "note": "CATEGORY v2：现场确认 DN80/PN10"}, token=disp, expect=200)
+    _, cat_hist = http("GET", f"/api/incidents/{catid}/material-provisions", token=wh_token, expect=200)
+    check("CATEGORY 方案变更时旧配料单被释放（未占用任何具体批次，无需退回扫描）",
+          cat_v2["plan"]["versionNo"] == 2
+          and cat_hist[0]["provision"]["status"] in ("RELEASED", "REPLACED")
+          and all(a["status"] != "ACTIVE" for a in cat_hist[0]["allocations"]),
+          cat_hist[0]["provision"])
+    st, cat_disp2 = http("POST", f"/api/incidents/{catid}/dispatch/repair",
+                         {"crewCode": "C_SOLE", "strategy": "DIRECT",
+                          "windowStart": "2026-11-27T06:00:00+08:00",
+                          "windowEnd": "2026-11-27T07:00:00+08:00"}, token=disp)
+    _, pv_cat2 = http("GET", f"/api/incidents/{catid}/material-provision", token=wh_token, expect=200)
+    check("CATEGORY 装车前按当时合格库存挑定具体批次（此时才出现批次号）",
+          st == 200 and pv_cat2["reveal"]["hasConcreteBatch"] is True
+          and len(pv_cat2["reveal"]["lockedBatches"]) >= 2, (st, pv_cat2["reveal"]))
+    http("POST", f"/api/assignments/{cat_disp2['id']}/cancel",
+         {"reason": "CATEGORY 方案变更对照完成，收回派工"}, token=disp, expect=200)
+
+    st, plan2 = http("POST", f"/api/incidents/{m1id}/repair-plans",
+                     {"lines": m1["v2Lines"], "granularity": "BATCH", "approve": True,
+                      "note": "现场确认一处为 DN80/PN10，改口径重做配料"}, token=disp)
+    _, pv2_before = http("GET", f"/api/incidents/{m1id}/material-provision", token=wh_token, expect=200)
+    check("方案变更 v2 获批，新配料单锁定 DN100×1 + DN80/PN10×2",
+          st == 200 and plan2["plan"]["versionNo"] == 2
+          and "PIPE-DN80-PN10-Q1" in [a["batchNo"] for a in pv2_before["allocations"]]
+          and "PIPE-DN100-PN16-Q1" in [a["batchNo"] for a in pv2_before["allocations"]],
+          pv2_before["allocations"])
+    _, pvs1 = http("GET", f"/api/incidents/{m1id}/material-provisions", token=wh_token, expect=200)
+    old1 = next(pv for pv in pvs1 if pv["provision"]["planVersionNo"] == 1)
+    check("旧配料单 v1 已 RELEASED/REPLACED（旧件锁定被释放，历史不删除）",
+          old1["provision"]["status"] in ("REPLACED", "RELEASED")
+          and old1["provision"]["releaseReason"], old1["provision"])
+    check("方案变更后旧方案的 DN100 密封件批次不再被该工地锁定",
+          pv2_before["provision"]["granularity"] == "BATCH"
+          and "SEAL-DN100-PN16-Q1" not in [a["batchNo"] for a in pv2_before["allocations"]
+                                            if a["status"] == "ACTIVE"])
+
+    # 派工发车：BATCH 粒度物料确定
+    _, a_m1 = http("POST", f"/api/incidents/{m1id}/dispatch/repair",
+                   {"crewCode": "C_SOLE", "strategy": "DIRECT",
+                    "windowStart": m1["windowStart"], "windowEnd": m1["windowEnd"],
+                    "note": "按 S2 方案 v2 发车"}, token=disp, expect=200)
+    check("维修单 M1 派工发车时物料已确定（BATCH 粒度直接可发）",
+          a_m1["status"] == "DISPATCHED", a_m1)
+    _, pv_m1 = http("GET", f"/api/incidents/{m1id}/material-provision", token=wh_token, expect=200)
+    check("发车即绑定配料单与派工单，批次仍为具体 DN100×1 + DN80/PN10×2",
+          pv_m1["provision"]["assignmentId"] == a_m1["id"]
+          and set(pv_m1["reveal"]["lockedBatches"]) >= {"PIPE-DN100-PN16-Q1", "PIPE-DN80-PN10-Q1"},
+          pv_m1["reveal"])
+
+    # 现场扫码领用 + 安装（记录安装位置）
+    issue_items = [{"batchNo": it["batchNo"], "qty": it["qty"], "lineNo": it["lineNo"], "segmentCode": "S2"}
+                   for it in m1["installs"]]
+    st, iss = http("POST", f"/api/incidents/{m1id}/material-scans/issue",
+                   {"items": issue_items, "eventAt": "2026-11-27T08:45:00+08:00"}, token=wh_token)
+    check("现场扫码领用 DN100 管、DN80 管，数量与锁定批次匹配",
+          st == 200 and iss["reveal"]["issuedQty"] == 3, (st, iss))
+    for it in m1["installs"]:
+        st, inst_scan = http("POST", f"/api/incidents/{m1id}/material-scans/install",
+                             {"item": {"batchNo": it["batchNo"], "qty": it["qty"], "lineNo": it["lineNo"],
+                                       "segmentCode": "S2", "locationText": "S2 幸福路3号"}} ,
+                             token=crew_token)
+        check(f"扫码安装 {it['batchNo']} × {it['qty']} 并记录安装位置 S2",
+              st == 200 and inst_scan["kind"] == "INSTALL" and inst_scan["segmentCode"] == "S2",
+              (st, inst_scan))
+    # 工单 M1 回执闭环（材料已安装，回执按顺序提交）
+    for tpl_type, t in m1["receipts"].items():
+        body = {"assignmentId": a_m1["id"], "type": tpl_type, "eventAt": t}
+        if tpl_type == "REPRESSURE":
+            body["readingCode"] = m1["reading"]
+        st, rc = http("POST", f"/api/incidents/{m1id}/receipts", body, token=disp)
+        check(f"M1 {tpl_type} 回执成功", st == 200, (st, rc))
+
+    # ---------- 17. 维修单 M2：方案先锁定 DN100 密封件批次，领料后召回 ----------
+    section("17. 维修单 M2：DN100 密封件配料后被召回（已领料后召回顺序）")
+    m2 = orders["sealRecall"]
+    _, r_m2 = http("POST", "/api/reports", m2["report"], token=disp, expect=200)
+    rid_m2 = r_m2["report"]["id"]
+    _, inc_m2 = http("POST", "/api/incidents",
+                     {"title": m2["title"], "reportIds": [rid_m2],
+                      "boundarySegmentCodes": m2["boundary"]}, token=disp, expect=200)
+    m2id = inc_m2["id"]
+    http("POST", f"/api/incidents/{m2id}/isolation-plans",
+         {"valveCodes": m2["valveCodes"]}, token=disp, expect=200)
+    st, plan_m2 = http("POST", f"/api/incidents/{m2id}/repair-plans",
+                       {"lines": m2["lines"], "granularity": "BATCH", "approve": True,
+                        "preferredBatchNo": m2["plannedBatch"],
+                        "note": "M2 锁定额定批次 SEAL-DN100-PN16-Q1"}, token=disp)
+    _, pv_m2_before = http("GET", f"/api/incidents/{m2id}/material-provision", token=wh_token, expect=200)
+    check("M2 方案获批锁定 SEAL-DN100-PN16-Q1（具体批次）",
+          st == 200 and m2["plannedBatch"] in
+          [a["batchNo"] for a in pv_m2_before["allocations"] if a["status"] == "ACTIVE"],
+          pv_m2_before["allocations"])
+
+    # 发车 + 已领料（现场还没装）
+    _, a_m2 = http("POST", f"/api/incidents/{m2id}/dispatch/repair",
+                   {"crewCode": "C_SOLE", "strategy": "RESERVE_BUNDLE", "holdOnly": True,
+                    "windowStart": m2["windowStart"], "windowEnd": m2["windowEnd"]}, token=disp, expect=200)
+    st, iss_m2 = http("POST", f"/api/incidents/{m2id}/material-scans/issue",
+                      {"items": [{"batchNo": m2["plannedBatch"], "qty": 2, "lineNo": 1, "segmentCode": "S3"}],
+                       "eventAt": "2026-11-27T10:45:00+08:00"}, token=wh_token)
+    check("M2 班组领用 SEAL-DN100-PN16-Q1 ×2（已领未装）",
+          st == 200 and iss_m2["reveal"]["issuedQty"] == 2, (st, iss_m2))
+
+    _, risk_before = http("GET", f"/api/materials/batches/{m2['plannedBatch']}/risk", token=wh_token, expect=200)
+    check("召回前风险清单显示该批次已领未装 2 件在 M2 工单",
+          any(x["incidentId"] == m2id and x["qty"] == 2
+              for x in risk_before["issuedNotInstalled"]), risk_before["issuedNotInstalled"])
+
+    st, recall_res = http("POST", "/api/materials/recalls",
+                          {"batchNo": m2["plannedBatch"], "kind": "QUALITY_RECALL",
+                           "reason": orders["recall"]["reason"],
+                           "publishedAt": orders["recall"]["publishedAt"]}, token=wh_token)
+    check("供应商发布召回成功，批次状态 RECALLED",
+          st == 200 and recall_res["batchStatus"] == "RECALLED", (st, recall_res))
+    check("召回后该批次可用发数量 issuableQty=0（无法继续出库）",
+          recall_res["issuableQty"] == 0, recall_res)
+    st, blocked = http("POST", f"/api/incidents/{m2id}/material-scans/issue",
+                       {"items": [{"batchNo": m2["plannedBatch"], "qty": 1, "lineNo": 1, "segmentCode": "S3"}]},
+                       token=wh_token)
+    check("召回批次再领用被 409 BATCH_NOT_ISSUABLE 拒绝（冻结/召回后不得出库）",
+          st == 409 and blocked["code"] == "BATCH_NOT_ISSUABLE", (st, blocked))
+
+    _, risk_after = http("GET", f"/api/materials/batches/{m2['plannedBatch']}/risk", token=wh_token, expect=200)
+    check("召回风险清单：仍在库数量可查且可发数量=0",
+          risk_after["inWarehouse"][0]["issuableQty"] == 0
+          and risk_after["inWarehouse"][0]["status"] == "RECALLED", risk_after["inWarehouse"])
+    check("召回风险清单：已领未装 2 件仍指向 M2 工单/管段/班组（可直接追责）",
+          any(x["incidentId"] == m2id and x["segmentCode"] == "S3" and x["qty"] == 2
+              for x in risk_after["issuedNotInstalled"]), risk_after["issuedNotInstalled"])
+
+    # 已领未装还没退回时，仓库不能直接重做配料
+    st, outstanding = http("POST", f"/api/incidents/{m2id}/material-provision/reprovision", {},
+                           token=wh_token)
+    check("已领未装未退回时重做配料被 409 MATERIAL_OUTSTANDING 拒绝",
+          st == 409 and outstanding["code"] == "MATERIAL_OUTSTANDING", (st, outstanding))
+
+    # 已领未装的旧件必须退回，不能装到管上；退回后仍不可发
+    st, ret_m2 = http("POST", f"/api/incidents/{m2id}/material-scans/return",
+                      {"items": [{"batchNo": m2["plannedBatch"], "qty": 2, "lineNo": 1, "segmentCode": "S3"}],
+                       "reason": "批次召回，已领未装旧件退回", "eventAt": "2026-11-27T11:10:00+08:00"},
+                      token=wh_token)
+    check("已领未装的召回旧件扫码退回成功", st == 200, (st, ret_m2))
+    _, b_after_return = http("GET", f"/api/materials/batches/{m2['plannedBatch']}", token=wh_token, expect=200)
+    check("退回后批次仍不可发（召回批次即使回库也不显示为可发库存）",
+          b_after_return["issuableQty"] == 0 and b_after_return["quantityOnHand"] >= 2,
+          b_after_return)
+
+    # 已领料后召回：退回未装旧件后，由仓库显式重做配料 -> 新配料单换用合格批次
+    _, pv_m2_mid = http("GET", f"/api/incidents/{m2id}/material-provision", token=wh_token, expect=200)
+    check("召回后原配料单进入 NEEDS_REPLACEMENT（已领后退回，等待重做）",
+          pv_m2_mid["provision"]["status"] == "NEEDS_REPLACEMENT"
+          and "BATCH_RECALLED" in (pv_m2_mid["provision"]["releaseReason"] or ""),
+          pv_m2_mid["provision"])
+    st, reprov_m2 = http("POST", f"/api/incidents/{m2id}/material-provision/reprovision", {},
+                         token=wh_token)
+    check("仓库显式重做配料成功，新配料单改用未召回的合格批次（不锁 Q1）",
+          st == 200 and m2["plannedBatch"] not in reprov_m2["reveal"]["lockedBatches"]
+          and bool(reprov_m2["reveal"]["lockedBatches"]), (st, reprov_m2["reveal"]))
+    new_m2 = reprov_m2
+    _, old_m2 = http("GET", f"/api/incidents/{m2id}/material-provisions", token=wh_token, expect=200)
+    old_pv = next(p for p in old_m2 if p["provision"]["code"] == plan_m2["provision"]["code"])
+    check("旧配料单标记 REPLACED 并保留召回原因与扫码历史",
+          old_pv["provision"]["status"] == "REPLACED"
+          and "BATCH_RECALLED" in (old_pv["provision"]["releaseReason"] or "")
+          and any(sc["kind"] == "RETURN" for sc in old_pv["scans"]),
+          old_pv["provision"])
+
+    # 发车 + 领用替代批次 + 安装
+    http("POST", f"/api/assignments/{a_m2['id']}/issue", {}, token=disp, expect=200)
+    repl2 = [a["batchNo"] for a in new_m2["allocations"] if a["status"] == "ACTIVE"][0]
+    st, iss_q2 = http("POST", f"/api/incidents/{m2id}/material-scans/issue",
+                      {"items": [{"batchNo": repl2, "qty": 2, "lineNo": 1, "segmentCode": "S3"}],
+                       "eventAt": "2026-11-27T11:12:00+08:00"}, token=wh_token)
+    check(f"改用重做后的合格批次 {repl2} 领用成功", st == 200, (st, iss_q2))
+    st, inst_q2 = http("POST", f"/api/incidents/{m2id}/material-scans/install",
+                       {"item": {"batchNo": repl2, "qty": 2, "lineNo": 1,
+                                 "segmentCode": "S3", "locationText": "S3 滨河巷5号阀后法兰"}},
+                       token=crew_token)
+    check("替代批次安装到 S3 并记录安装位置", st == 200 and inst_q2["segmentCode"] == "S3", (st, inst_q2))
+    _, risk_after_install = http("GET", f"/api/materials/batches/{m2['plannedBatch']}/risk", token=wh_token, expect=200)
+    check("召回批次风险清单：已领未装清零，历史已装记录为空（该批次从未装上）",
+          not risk_after_install["issuedNotInstalled"] and not risk_after_install["installed"],
+          risk_after_install)
+    check("召回批次退回数量已记录（已退回件数在库）",
+          risk_after_install["inWarehouse"][0]["quantityReturnedAfterRecall"] == 2,
+          risk_after_install["inWarehouse"])
+
+    # M2 回执并关单
+    for tpl_type, t in m2["receipts"].items():
+        body = {"assignmentId": a_m2["id"], "type": tpl_type, "eventAt": t}
+        if tpl_type == "REPRESSURE":
+            body["readingCode"] = m2["reading"]
+        st, rc = http("POST", f"/api/incidents/{m2id}/receipts", body, token=disp)
+        check(f"M2 {tpl_type} 回执成功", st == 200, (st, rc))
+
+    # ---------- 18. 竣工验收：材料批次关联管段，形成验收依据 ----------
+    section("18. 竣工验收把材料批次关联到管段；召回后能找出已安装材料去向")
+    st, acc_m1 = http("POST", f"/api/incidents/{m1id}/material-acceptance",
+                      {"note": "M1 竣工验收：管材批次按 S2 管段关联"}, token=disp)
+    check("M1 验收成功：DN80/PN10 安装于 S2，DN100 安装于 S2（按管段关联）",
+          st == 200 and acc_m1["basis"]["distinctSegments"] == ["S2"]
+          and "PIPE-DN80-PN10-Q1" in acc_m1["basis"]["distinctBatches"]
+          and "PIPE-DN100-PN16-Q1" in acc_m1["basis"]["distinctBatches"], (st, acc_m1))
+    st, closed_m1 = http("POST", f"/api/incidents/{m1id}/close", {}, token=disp)
+    check("M1 验收后关单成功", st == 200 and closed_m1["status"] == "CLOSED", (st, closed_m1))
+    st, close_no_acc = http("POST", f"/api/incidents/{m2id}/close", {}, token=disp)
+    check("M2 已安装材料但未验收 → 关单被 409 MATERIAL_ACCEPTANCE_REQUIRED 拒绝",
+          st == 409 and close_no_acc["code"] == "MATERIAL_ACCEPTANCE_REQUIRED", (st, close_no_acc))
+    st, acc_m2 = http("POST", f"/api/incidents/{m2id}/material-acceptance",
+                      {"note": "M2 竣工验收：替代批次关联 S3"}, token=disp)
+    check("M2 验收成功：重做后的合格批次关联 S3 管段",
+          st == 200 and repl2 in acc_m2["basis"]["distinctBatches"]
+          and acc_m2["basis"]["distinctSegments"] == ["S3"], (st, acc_m2))
+    st, closed_m2 = http("POST", f"/api/incidents/{m2id}/close", {}, token=disp)
+    check("M2 验收后关单成功", st == 200 and closed_m2["status"] == "CLOSED", (st, closed_m2))
+
+    # ---------- 19. 两粒度对比：CATEGORY 先锁类别、装车前挑批次 ----------
+    section("19. 对比 CATEGORY 粒度：先锁满足参数的材料类别，装车前按当时合格库存挑批次")
+    _, r_m3 = http("POST", "/api/reports", {
+        "hotlineCallId": "HC-20261127-1003", "callerPhone": "13900001003",
+        "rawAddress": "滨河巷7号", "description": "S3 二次维护，按 CATEGORY 粒度配料验证",
+        "receivedAt": "2026-11-27T12:10:00+08:00"}, token=disp, expect=200)
+    _, inc_m3 = http("POST", "/api/incidents",
+                     {"title": "S3 CATEGORY 粒度对比单", "reportIds": [r_m3["report"]["id"]],
+                      "boundarySegmentCodes": ["S3"]}, token=disp, expect=200)
+    m3id = inc_m3["id"]
+    http("POST", f"/api/incidents/{m3id}/isolation-plans", {"valveCodes": ["V3"]}, token=disp, expect=200)
+    st, plan_cat = http("POST", f"/api/incidents/{m3id}/repair-plans",
+                        {"lines": [{"lineNo": 1, "category": "SEAL", "dn": 100, "material": "EPDM",
+                                    "connectionType": "FLANGE", "pn": 16, "quantity": 2,
+                                    "segmentCode": "S3", "locationText": "滨河巷7号阀后法兰"}],
+                         "granularity": "CATEGORY", "approve": True,
+                         "note": "只锁材料类别，装车前再挑批次"}, token=disp)
+    _, pv_m3_before = http("GET", f"/api/incidents/{m3id}/material-provision", token=wh_token, expect=200)
+    check("CATEGORY 粒度方案获批后只锁定材料类别，尚无具体批次",
+          st == 200 and plan_cat["provision"]["granularity"] == "CATEGORY"
+          and plan_cat["provision"]["status"] in ("LOCKED", "PENDING_LOCK")
+          and not pv_m3_before["reveal"]["hasConcreteBatch"], pv_m3_before["reveal"])
+
+    # 派工：CATEGORY 粒度在发车前按当时合格库存挑批次
+    st, cat_disp = http("POST", f"/api/incidents/{m3id}/dispatch/repair",
+                        {"crewCode": "C_SOLE", "strategy": "DIRECT",
+                         "windowStart": "2026-11-27T12:30:00+08:00",
+                         "windowEnd": "2026-11-27T14:00:00+08:00"}, token=disp)
+    check("CATEGORY 粒度在派工发车前挑定具体合格批次（未再锁被召回的 Q1）",
+          st == 200, (st, cat_disp))
+    _, pv_m3 = http("GET", f"/api/incidents/{m3id}/material-provision", token=wh_token, expect=200)
+    check("CATEGORY 粒度装车前挑中仍合格的 SEAL-DN100-PN16-Q2（避开已召回 Q1）",
+          "SEAL-DN100-PN16-Q2" in pv_m3["reveal"]["lockedBatches"]
+          and m2["plannedBatch"] not in pv_m3["reveal"]["lockedBatches"],
+          pv_m3["reveal"])
+    # 对比单完成对比后收回，释放队伍占用（不影响对比结论）
+    http("POST", f"/api/assignments/{cat_disp['id']}/cancel",
+         {"reason": "CATEGORY 对比验证完成，收回派工"}, token=disp, expect=200)
+
+    # ---------- 19b. 召回先到：配料后、发车前即召回 ----------
+    section("19b. 召回先到：配料后发车前召回，发车被拦，重做配料后正常发车")
+    m4 = orders["recallFirst"]
+    _, r_m4 = http("POST", "/api/reports", m4["report"], token=disp, expect=200)
+    _, inc_m4 = http("POST", "/api/incidents",
+                     {"title": m4["title"], "reportIds": [r_m4["report"]["id"]],
+                      "boundarySegmentCodes": m4["boundary"]}, token=disp, expect=200)
+    m4id = inc_m4["id"]
+    http("POST", f"/api/incidents/{m4id}/isolation-plans", {"valveCodes": m4["valveCodes"]}, token=disp, expect=200)
+    _, plan_m4 = http("POST", f"/api/incidents/{m4id}/repair-plans",
+                      {"lines": m4["lines"], "granularity": "BATCH", "approve": True,
+                       "preferredBatchNo": m4["plannedBatch"],
+                       "note": "M4 配料锁 Q3，尚未领料/发车"}, token=disp, expect=200)
+    _, pv_m4_before = http("GET", f"/api/incidents/{m4id}/material-provision", token=wh_token, expect=200)
+    check("M4 配料先锁定 SEAL-DN100-PN16-Q3（尚未领料）",
+          m4["plannedBatch"] in pv_m4_before["reveal"]["lockedBatches"], pv_m4_before["reveal"])
+
+    recall_first = orders["recallFirstRecall"]
+    st, rec4 = http("POST", "/api/materials/recalls",
+                    {"batchNo": recall_first["batchNo"], "kind": recall_first["kind"],
+                     "reason": recall_first["reason"], "publishedAt": recall_first["publishedAt"]},
+                    token=wh_token)
+    check("召回先到：批次 Q3 立即 RECALLED 且 issuableQty=0",
+          st == 200 and rec4["batchStatus"] == "RECALLED" and rec4["issuableQty"] == 0, (st, rec4))
+    _, pvs_m4 = http("GET", f"/api/incidents/{m4id}/material-provisions", token=wh_token, expect=200)
+    check("召回后旧配料单被 REPLACED，并自动重做配料（新配料单改用合格批次 Q5/Q2）",
+          pvs_m4[0]["provision"]["status"] == "REPLACED"
+          and pvs_m4[-1]["provision"]["status"] in ("LOCKED", "PICKED")
+          and m4["plannedBatch"] not in pvs_m4[-1]["reveal"]["lockedBatches"]
+          and pvs_m4[-1]["reveal"]["lockedBatches"], pvs_m4)
+    check("召回先到时没有任何已领未装/已安装记录（风险清单为空）",
+          not rec4["issuedNotInstalled"] and not rec4["installed"], rec4)
+
+    st, a_m4 = http("POST", f"/api/incidents/{m4id}/dispatch/repair",
+                    {"crewCode": "C_SOLE", "strategy": "DIRECT",
+                     "windowStart": m4["windowStart"], "windowEnd": m4["windowEnd"]},
+                    token=disp, expect=200)
+    _, pv_m4 = http("GET", f"/api/incidents/{m4id}/material-provision", token=wh_token, expect=200)
+    rep_batch = [a["batchNo"] for a in pv_m4["allocations"] if a["status"] == "ACTIVE"]
+    check("物料重做后方可发车，发车批次不含被召回 Q3",
+          a_m4["status"] == "DISPATCHED" and m4["plannedBatch"] not in rep_batch, rep_batch)
+    st, iss_m4 = http("POST", f"/api/incidents/{m4id}/material-scans/issue",
+                      {"items": [{"batchNo": rep_batch[0], "qty": 2, "lineNo": 1, "segmentCode": "S1"}]},
+                      token=wh_token, expect=200)
+    st, inst_m4 = http("POST", f"/api/incidents/{m4id}/material-scans/install",
+                       {"item": {"batchNo": rep_batch[0], "qty": 2, "lineNo": 1,
+                                 "segmentCode": "S1", "locationText": "S1 建设路1号阀后法兰"}},
+                       token=crew_token)
+    check("替代批次安装到 S1", st == 200 and inst_m4["segmentCode"] == "S1", (st, inst_m4))
+    for tpl_type, t in m4["receipts"].items():
+        body = {"assignmentId": a_m4["id"], "type": tpl_type, "eventAt": t}
+        if tpl_type == "REPRESSURE":
+            body["readingCode"] = m4["reading"]
+        st, rc = http("POST", f"/api/incidents/{m4id}/receipts", body, token=disp)
+        check(f"M4 {tpl_type} 回执成功", st == 200, (st, rc))
+    st, acc_m4 = http("POST", f"/api/incidents/{m4id}/material-acceptance", {}, token=disp, expect=200)
+    st, closed_m4 = http("POST", f"/api/incidents/{m4id}/close", {}, token=disp)
+    check("M4 验收并关单", st == 200 and closed_m4["status"] == "CLOSED", (st, closed_m4))
+    _, risk_q3 = http("GET", f"/api/materials/batches/{m4['plannedBatch']}/risk", token=wh_token, expect=200)
+    check("召回批次 Q3 风险清单无已装记录（从未装上），在库可发=0",
+          not risk_q3["installed"] and risk_q3["inWarehouse"][0]["issuableQty"] == 0,
+          risk_q3)
+
+    # ---------- 19c. 已安装后召回：竣工验收已关联批次，召回后追溯去向并替换 ----------
+    section("19c. 已安装后召回：验收已关联批次→召回追溯已装去向→替换保留历史并二次验收")
+    m5 = orders["installedRecall"]
+    _, r_m5 = http("POST", "/api/reports", m5["report"], token=disp, expect=200)
+    _, inc_m5 = http("POST", "/api/incidents",
+                     {"title": m5["title"], "reportIds": [r_m5["report"]["id"]],
+                      "boundarySegmentCodes": m5["boundary"]}, token=disp, expect=200)
+    m5id = inc_m5["id"]
+    http("POST", f"/api/incidents/{m5id}/isolation-plans", {"valveCodes": m5["valveCodes"]}, token=disp, expect=200)
+    _, plan_m5 = http("POST", f"/api/incidents/{m5id}/repair-plans",
+                      {"lines": m5["lines"], "granularity": "BATCH", "approve": True,
+                       "preferredBatchNo": m5["plannedBatch"], "note": "M5 锁定 Q4"}, token=disp, expect=200)
+    st, a_m5 = http("POST", f"/api/incidents/{m5id}/dispatch/repair",
+                    {"crewCode": "C_SOLE", "strategy": "DIRECT",
+                     "windowStart": m5["windowStart"], "windowEnd": m5["windowEnd"]}, token=disp, expect=200)
+    http("POST", f"/api/incidents/{m5id}/material-scans/issue",
+         {"items": [{"batchNo": m5["plannedBatch"], "qty": 2, "lineNo": 1, "segmentCode": "S2"}]},
+         token=wh_token, expect=200)
+    st, inst_q4 = http("POST", f"/api/incidents/{m5id}/material-scans/install",
+                       {"item": {"batchNo": m5["plannedBatch"], "qty": 2, "lineNo": 1,
+                                 "segmentCode": "S2", "locationText": "S2 幸福路5号阀后法兰"}},
+                       token=crew_token)
+    check("M5 先安装 Q4 到 S2（此时尚未召回）", st == 200 and inst_q4["segmentCode"] == "S2", (st, inst_q4))
+    for tpl_type, t in m5["receipts"].items():
+        body = {"assignmentId": a_m5["id"], "type": tpl_type, "eventAt": t}
+        if tpl_type == "REPRESSURE":
+            body["readingCode"] = m5["reading"]
+        st, rc = http("POST", f"/api/incidents/{m5id}/receipts", body, token=disp)
+        check(f"M5 {tpl_type} 回执成功", st == 200, (st, rc))
+    st, acc5_first = http("POST", f"/api/incidents/{m5id}/material-acceptance",
+                          {"note": "M5 首次竣工验收：Q4 关联 S2"}, token=disp, expect=200)
+    check("M5 首次竣工验收已把 Q4 批次关联到 S2 管段（验收依据）",
+          m5["plannedBatch"] in acc5_first["basis"]["distinctBatches"]
+          and acc5_first["basis"]["distinctSegments"] == ["S2"], (st, acc5_first))
+
+    # 竣工验收后供应商发布认证撤销
+    rec5 = orders["installedRecallRecall"]
+    st, rec5_res = http("POST", "/api/materials/recalls",
+                        {"batchNo": rec5["batchNo"], "kind": rec5["kind"],
+                         "reason": rec5["reason"], "publishedAt": rec5["publishedAt"]},
+                        token=wh_token)
+    check("已装后认证撤销：批次 RECALLED 且可发数量=0",
+          st == 200 and rec5_res["batchStatus"] == "RECALLED"
+          and rec5_res["inWarehouse"][0]["issuableQty"] == 0, (st, rec5_res))
+    check("风险清单能定位已安装材料具体去向：M5 工单 / S2 管段 / 2 件 / 安装扫码",
+          len(rec5_res["installed"]) == 1
+          and rec5_res["installed"][0]["incidentId"] == m5id
+          and rec5_res["installed"][0]["assignmentId"] == a_m5["id"]
+          and rec5_res["installed"][0]["segmentCode"] == "S2"
+          and rec5_res["installed"][0]["qty"] == 2
+          and rec5_res["installed"][0]["installScanId"] == inst_q4["id"]
+          and rec5_res["installed"][0]["certStatus"] == "REVOKED", rec5_res["installed"])
+    check("已安装的召回批次能反查竣工验收 id（验收依据与管段关联）",
+          rec5_res["installed"][0]["acceptanceId"] == acc5_first["acceptance"]["id"],
+          rec5_res["installed"])
+    check("已安装的召回批次不在“已领未装”里（已装上，需替换而非退回）",
+          not rec5_res["issuedNotInstalled"], rec5_res["issuedNotInstalled"])
+
+    # 已装后召回：原配料单保留在役扫码并置 NEEDS_REPLACEMENT；由仓库重做配料取替换件
+    _, pv5_before = http("GET", f"/api/incidents/{m5id}/material-provision", token=wh_token, expect=200)
+    check("已装后召回：原配料单保留在役安装扫码并置 NEEDS_REPLACEMENT（不删历史）",
+          pv5_before["provision"]["status"] == "NEEDS_REPLACEMENT"
+          and any(sc["kind"] == "INSTALL" and sc["batchNo"] == m5["plannedBatch"]
+                  for sc in pv5_before["scans"]), pv5_before["provision"])
+    st, pv5 = http("POST", f"/api/incidents/{m5id}/material-provision/reprovision", {},
+                   token=wh_token, expect=200)
+    repl5 = [a["batchNo"] for a in pv5["allocations"] if a["status"] == "ACTIVE"]
+    check("已装后召回由仓库重做配料，新配料单锁定的是未召回合格批次",
+          bool(repl5) and m5["plannedBatch"] not in repl5, pv5["reveal"])
+    repl5 = repl5[0]
+    http("POST", f"/api/incidents/{m5id}/material-scans/issue",
+         {"items": [{"batchNo": repl5, "qty": 2, "lineNo": 1, "segmentCode": "S2"}]},
+         token=wh_token, expect=200)
+    st, rep = http("POST", f"/api/incidents/{m5id}/material-scans/install",
+                   {"item": {"batchNo": repl5, "qty": 2, "lineNo": 1,
+                             "segmentCode": "S2", "locationText": "S2 幸福路5号阀后法兰（召回替换）",
+                             "replacesScanId": inst_q4["id"]}}, token=crew_token)
+    check("用未召回的合格批次替换已装 Q4（新安装扫码指向旧安装）",
+          st == 200 and rep["replacesScanId"] == inst_q4["id"]
+          and rep["batchNo"] == repl5, (st, rep))
+    st, same = http("POST", f"/api/incidents/{m5id}/material-scans/issue",
+                    {"items": [{"batchNo": m5["plannedBatch"], "qty": 1, "lineNo": 1, "segmentCode": "S2"}]},
+                    token=wh_token)
+    check("召回批次再领用继续被拒（即使已有替换）",
+          st == 409 and same["code"] == "BATCH_NOT_ISSUABLE", (st, same))
+
+    _, risk5_after = http("GET", f"/api/materials/batches/{m5['plannedBatch']}/risk", token=wh_token, expect=200)
+    check("替换后风险清单：旧安装转入“已整改”，不再计为有效在役",
+          len(risk5_after["installed"]) == 0
+          and len(risk5_after["remediated"]) == 1
+          and risk5_after["remediated"][0]["remediatedByScanId"] == rep["id"], risk5_after)
+    check("已整改记录仍完整保留去向（工单/管段/数量/验收 id 全部不删除）",
+          risk5_after["remediated"][0]["incidentId"] == m5id
+          and risk5_after["remediated"][0]["segmentCode"] == "S2"
+          and risk5_after["remediated"][0]["qty"] == 2
+          and risk5_after["remediated"][0]["acceptanceId"] == acc5_first["acceptance"]["id"],
+          risk5_after["remediated"][0])
+
+    # 首次验收后又有替换安装 → 关单前必须重新验收（验收依据需与在役材料一致）
+    st, reacc5 = http("POST", f"/api/incidents/{m5id}/close", {}, token=disp)
+    check("首次验收后又发生替换安装 → 关单被 409 MATERIAL_REACCEPTANCE_REQUIRED 拒绝",
+          st == 409 and reacc5["code"] == "MATERIAL_REACCEPTANCE_REQUIRED", (st, reacc5))
+    # 二次验收：以替换后的合格批次为在役依据
+    st, acc5 = http("POST", f"/api/incidents/{m5id}/material-acceptance",
+                    {"note": "M5 二次验收：记录以召回替换后的合格批次为在役依据"}, token=disp)
+    check("M5 二次验收依据只含替换后的合格批次安装于 S2（不把已召回 Q4 记作在役）",
+          st == 200 and repl5 in acc5["basis"]["distinctBatches"]
+          and m5["plannedBatch"] not in acc5["basis"]["distinctBatches"]
+          and acc5["basis"]["distinctSegments"] == ["S2"], (st, acc5))
+    st, closed5 = http("POST", f"/api/incidents/{m5id}/close", {}, token=disp)
+    check("M5 替换并二次验收后正常关单", st == 200 and closed5["status"] == "CLOSED", (st, closed5))
+
+    # ---------- 19d. 冻结批次：冻结后不得继续出库，已锁未领的旧件释放 ----------
+    section("19d. 仓库冻结批次：冻结后不得继续出库，已锁未领的旧件释放锁定")
+    st, frozen = http("POST", "/api/materials/batches/PIPE-DN80-PN16-Q1/freeze",
+                      {"reason": "质检抽检不合格，同批停用"}, token=wh_token)
+    check("冻结批次成功，状态 FROZEN 且可发数量=0",
+          st == 200 and frozen["batchStatus"] == "FROZEN" and frozen["issuableQty"] == 0, (st, frozen))
+    st, refreeze = http("POST", "/api/materials/batches/PIPE-DN80-PN16-Q1/freeze",
+                        {"reason": "重复冻结"}, token=wh_token)
+    check("重复冻结被 409 BATCH_NOT_QUALIFIED 拒绝", st == 409 and refreeze["code"] == "BATCH_NOT_QUALIFIED",
+          (st, refreeze))
+    _, b_frozen = http("GET", "/api/materials/batches/PIPE-DN80-PN16-Q1", token=wh_token, expect=200)
+    check("冻结批次库存行仍保留但 issuableQty=0（不可发）",
+          b_frozen["issuableQty"] == 0 and b_frozen["status"] == "FROZEN", b_frozen)
+    # 冻结合格批次后，PN16 需求若只剩该批次，必须缺料，不得降级为 PN10
+    _, fr_report = http("POST", "/api/reports", {
+        "hotlineCallId": "HC-20261127-1997", "callerPhone": "13900001997",
+        "rawAddress": "幸福路8号", "description": "冻结后缺料探针报修",
+        "receivedAt": "2026-11-27T12:00:00+08:00"}, token=disp, expect=200)
+    _, fr_inc = http("POST", "/api/incidents",
+                     {"title": "冻结后缺料探针", "reportIds": [fr_report["report"]["id"]],
+                      "boundarySegmentCodes": ["S2"]}, token=disp, expect=200)
+    st, fr_plan = http("POST", f"/api/incidents/{fr_inc['id']}/repair-plans",
+                       {"lines": [{"lineNo": 1, "category": "PIPE", "dn": 80, "material": "DUCTILE_IRON",
+                                   "connectionType": "FLANGE", "pn": 16, "quantity": 6,
+                                   "segmentCode": "S2", "locationText": "冻结后缺料探针"}],
+                        "granularity": "BATCH", "approve": True}, token=disp)
+    check("冻结最末 PN16 批次后，PN16 需求缺料（不会用 PN10 件顶替）",
+          st == 409 and fr_plan["code"] == "MATERIAL_SHORTAGE", (st, fr_plan))
+
+    # ---------- 20. 恢复后：未使用旧批次不显示为可发库存 ----------
+    section("20. 恢复后旧批次核查：任何未使用旧批次均不显示为可发库存")
+    st, final_batches = http("GET", "/api/materials/batches", token=wh_token, expect=200)
+    old = next(b for b in final_batches if b["batchNo"] == m2["plannedBatch"])
+    check("召回批次终态 RECALLED 且 issuableQty=0，在库数量仅作历史记录",
+          old["status"] == "RECALLED" and old["issuableQty"] == 0, old)
+    check("所有 issuableQty>0 的批次都是 QUALIFIED（冻结/召回批次不伪装可发）",
+          all(b["status"] == "QUALIFIED" for b in final_batches if b["issuableQty"] > 0),
+          [(b["batchNo"], b["status"], b["issuableQty"]) for b in final_batches])
+
+    # ---------- 20b. 三种顺序 × 两种粒度的对比结论 ----------
+    section("20b. 三种顺序×两种粒度：锁定、换料、退库、已装风险清单与验收依据对比")
+    _, m1_final = http("GET", f"/api/incidents/{m1id}", token=disp, expect=200)
+    _, m2_final = http("GET", f"/api/incidents/{m2id}", token=disp, expect=200)
+    _, m4_final = http("GET", f"/api/incidents/{m4id}", token=disp, expect=200)
+    _, cat_final = http("GET", f"/api/incidents/{catid}/material-provisions", token=wh_token, expect=200)
+
+    # 配方变更先到：BATCH 需"释放旧件 + 重做配料"（两次配料单），CATEGORY 只改参数类别
+    check("方案变更先到：BATCH 粒度经历 v1→v2 两张配料单",
+          len([p for p in http("GET", f"/api/incidents/{m1id}/material-provisions", token=wh_token)[1]
+               if p["provision"]["granularity"] == "BATCH"]) == 2)
+    check("方案变更先到：CATEGORY 粒度同样 v1→v2，但获批不落具体批次",
+          len(cat_final) == 2
+          and all(p["provision"]["granularity"] == "CATEGORY" for p in cat_final))
+    # 召回先到：批次一召回即不可发，重做后替换
+    check("召回先到：Q3 从未进入扫码记录，重做配料后发车",
+          not http("GET", f"/api/materials/batches/{m4['plannedBatch']}/risk", token=wh_token)[1]["installed"]
+          and plan_m4["provision"]["id"] != http("GET", f"/api/incidents/{m4id}/material-provision", token=wh_token)[1]["provision"]["id"])
+    # 已领料后召回：已领未装转退回，替代批次安装，验收仅含替代批次
+    _, acc_m2_final = http("GET", f"/api/incidents/{m2id}/material-acceptance", token=disp, expect=200)
+    check("已领料后召回：M2 验收依据只含重做后的合格批次，不含被召回 Q1",
+          len(acc_m2_final) >= 1
+          and repl2 in acc_m2_final[-1]["basis"]["distinctBatches"]
+          and m2["plannedBatch"] not in acc_m2_final[-1]["basis"]["distinctBatches"],
+          acc_m2_final[-1]["basis"] if acc_m2_final else None)
+    _, risk5_final = http("GET", f"/api/materials/batches/{m5['plannedBatch']}/risk", token=wh_token, expect=200)
+    check("已安装后召回：Q4 的已装去向保留为“已整改”，替换后无有效在役件",
+          len(risk5_final["remediated"]) == 1 and not risk5_final["installed"]
+          and risk5_final["inWarehouse"][0]["issuableQty"] == 0, risk5_final)
+
+    # ---------- 21. 终态：所有占用均已释放 ----------
+    section("21. 终态核对：抢修事故回执闭环 + 材料工单验收；资源占用释放")
     _, occ_all = http("GET", "/api/occupancies", token=disp)
     held_left = [o for o in occ_all if o["status"] == "HELD"]
     check("回放结束后不存在任何 HELD 占用（并发试探单已取消、各单已完成/关单）",
           not held_left, [(o["resourceType"], o["resourceCode"], o["incidentId"]) for o in held_left])
     _, incs = http("GET", "/api/incidents", token=disp)
-    check("共 3 个事故且全部 CLOSED",
-          len(incs) == 3 and all(i["status"] == "CLOSED" for i in incs),
-          [(i["code"], i["status"]) for i in incs])
+    closed_codes = sorted(i["code"] for i in incs if i["status"] == "CLOSED")
+    m1_state = next(i for i in incs if i["id"] == m1id)
+    m2_state = next(i for i in incs if i["id"] == m2id)
+    m5_state = next(i for i in incs if i["id"] == m5id)
+    check("材料工单 M1/M2/M5 均已闭环并保存验收依据",
+          m1_state["status"] == "CLOSED" and m2_state["status"] == "CLOSED"
+          and m5_state["status"] == "CLOSED"
+          and len(http("GET", f"/api/incidents/{m1id}/material-acceptance", token=disp)[1]) >= 1
+          and len(http("GET", f"/api/incidents/{m2id}/material-acceptance", token=disp)[1]) >= 1
+          and len(http("GET", f"/api/incidents/{m5id}/material-acceptance", token=disp)[1]) >= 2,
+          [(m1_state["id"], m1_state["status"]), (m2_state["id"], m2_state["status"]),
+           (m5_state["id"], m5_state["status"])])
 
     print("\n" + "#" * 78)
     print(f"# 回放断言结果：PASS={PASS_COUNT}  FAIL={FAIL_COUNT}")

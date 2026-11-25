@@ -5,6 +5,16 @@ import com.waterrepair.dispatch.AssignmentRepository;
 import com.waterrepair.dispatch.ResourceOccupancy;
 import com.waterrepair.dispatch.ResourceOccupancyRepository;
 import com.waterrepair.receipt.FieldReceipt;
+import com.waterrepair.material.MaterialAcceptanceService;
+import com.waterrepair.material.MaterialProvision;
+import com.waterrepair.material.MaterialProvisionRepository;
+import com.waterrepair.material.MaterialScan;
+import com.waterrepair.material.MaterialScanRepository;
+import com.waterrepair.material.MaterialDtos;
+import com.waterrepair.material.RepairPlan;
+import com.waterrepair.material.RepairPlanLine;
+import com.waterrepair.material.RepairPlanLineRepository;
+import com.waterrepair.material.RepairPlanRepository;
 import com.waterrepair.receipt.FieldReceiptRepository;
 import com.waterrepair.report.ReportDtos;
 import com.waterrepair.report.ReportService;
@@ -31,6 +41,11 @@ public class IncidentQueryService {
     private final ResourceOccupancyRepository occupancyRepo;
     private final FieldReceiptRepository receiptRepo;
     private final ReportService reportService;
+    private final RepairPlanRepository repairPlanRepo;
+    private final RepairPlanLineRepository repairPlanLineRepo;
+    private final MaterialProvisionRepository provisionRepo;
+    private final MaterialScanRepository materialScanRepo;
+    private final MaterialAcceptanceService acceptanceService;
 
     public IncidentQueryService(IncidentRepository incidentRepo,
                                 IncidentSourceRepository sourceRepo,
@@ -41,7 +56,12 @@ public class IncidentQueryService {
                                 AssignmentRepository assignmentRepo,
                                 ResourceOccupancyRepository occupancyRepo,
                                 FieldReceiptRepository receiptRepo,
-                                ReportService reportService) {
+                                ReportService reportService,
+                                RepairPlanRepository repairPlanRepo,
+                                RepairPlanLineRepository repairPlanLineRepo,
+                                MaterialProvisionRepository provisionRepo,
+                                MaterialScanRepository materialScanRepo,
+                                MaterialAcceptanceService acceptanceService) {
         this.incidentRepo = incidentRepo;
         this.sourceRepo = sourceRepo;
         this.planRepo = planRepo;
@@ -52,6 +72,11 @@ public class IncidentQueryService {
         this.occupancyRepo = occupancyRepo;
         this.receiptRepo = receiptRepo;
         this.reportService = reportService;
+        this.repairPlanRepo = repairPlanRepo;
+        this.repairPlanLineRepo = repairPlanLineRepo;
+        this.provisionRepo = provisionRepo;
+        this.materialScanRepo = materialScanRepo;
+        this.acceptanceService = acceptanceService;
     }
 
     public record IncidentDetail(Incident incident,
@@ -63,7 +88,11 @@ public class IncidentQueryService {
                                  List<PressureReview> pressureReviews,
                                  List<Assignment> assignments,
                                  List<ResourceOccupancy> occupancies,
-                                 List<FieldReceipt> receipts) {
+                                 List<FieldReceipt> receipts,
+                                 List<RepairPlan> repairPlans,
+                                 List<MaterialProvision> materialProvisions,
+                                 List<MaterialScan> materialScans,
+                                 List<MaterialDtos.AcceptanceView> materialAcceptances) {
     }
 
     @Transactional(readOnly = true)
@@ -80,6 +109,10 @@ public class IncidentQueryService {
         List<Assignment> assignments = assignmentRepo.findByIncidentIdOrderByIdAsc(id);
         List<ResourceOccupancy> occupancies = occupancyRepo.findByIncidentIdOrderByIdAsc(id);
         List<FieldReceipt> receipts = receiptRepo.findByIncidentIdOrderByIdAsc(id);
+        List<RepairPlan> repairPlans = repairPlanRepo.findByIncidentIdOrderByVersionNoAscIdAsc(id);
+        List<MaterialProvision> provisionList = provisionRepo.findByIncidentIdOrderByIdAsc(id);
+        List<MaterialScan> materialScans = materialScanRepo.findByIncidentIdOrderByIdAsc(id);
+        List<MaterialDtos.AcceptanceView> acceptances = acceptanceService.list(id);
         return new IncidentDetail(
                 incident,
                 sources,
@@ -90,6 +123,10 @@ public class IncidentQueryService {
                 reviewRepo.findByIncidentIdOrderByIdAsc(id),
                 assignments,
                 occupancies,
-                receipts);
+                receipts,
+                repairPlans,
+                provisionList,
+                materialScans,
+                acceptances);
     }
 }

@@ -1,62 +1,481 @@
 {
   "nodes": [
-    { "code": "NSRC", "name": "城西干管水源接口", "type": "SOURCE", "lng": 120.000, "lat": 30.000 },
-    { "code": "NT0",  "name": "光明路三通",       "type": "TEE",    "lng": 120.001, "lat": 30.000 },
-    { "code": "NV1",  "name": "V1 阀门井",        "type": "VALVE",  "lng": 120.0016, "lat": 30.0006 },
-    { "code": "NT1",  "name": "幸福里三通",       "type": "TEE",    "lng": 120.0022, "lat": 30.0004 },
-    { "code": "NE1",  "name": "建设路末端",       "type": "END",    "lng": 120.0030, "lat": 30.0004 },
-    { "code": "NV2",  "name": "V2 阀门井",        "type": "VALVE",  "lng": 120.0025, "lat": 30.0010 },
-    { "code": "NE2",  "name": "幸福路北末端",     "type": "END",    "lng": 120.0026, "lat": 30.0014 },
-    { "code": "NV3",  "name": "V3 阀门井",        "type": "VALVE",  "lng": 120.0015, "lat": 29.9996 },
-    { "code": "NE3",  "name": "滨河巷末端",       "type": "END",    "lng": 120.0027, "lat": 30.00135 }
+    {
+      "code": "NSRC",
+      "name": "城西干管水源接口",
+      "type": "SOURCE",
+      "lng": 120.0,
+      "lat": 30.0
+    },
+    {
+      "code": "NT0",
+      "name": "光明路三通",
+      "type": "TEE",
+      "lng": 120.001,
+      "lat": 30.0
+    },
+    {
+      "code": "NV1",
+      "name": "V1 阀门井",
+      "type": "VALVE",
+      "lng": 120.0016,
+      "lat": 30.0006
+    },
+    {
+      "code": "NT1",
+      "name": "幸福里三通",
+      "type": "TEE",
+      "lng": 120.0022,
+      "lat": 30.0004
+    },
+    {
+      "code": "NE1",
+      "name": "建设路末端",
+      "type": "END",
+      "lng": 120.003,
+      "lat": 30.0004
+    },
+    {
+      "code": "NV2",
+      "name": "V2 阀门井",
+      "type": "VALVE",
+      "lng": 120.0025,
+      "lat": 30.001
+    },
+    {
+      "code": "NE2",
+      "name": "幸福路北末端",
+      "type": "END",
+      "lng": 120.0026,
+      "lat": 30.0014
+    },
+    {
+      "code": "NV3",
+      "name": "V3 阀门井",
+      "type": "VALVE",
+      "lng": 120.0015,
+      "lat": 29.9996
+    },
+    {
+      "code": "NE3",
+      "name": "滨河巷末端",
+      "type": "END",
+      "lng": 120.0027,
+      "lat": 30.00135
+    }
   ],
   "segments": [
-    { "code": "M0",  "name": "干管 M0",        "from": "NSRC", "to": "NT0", "pMin": 0.20, "pMax": 0.46, "tolSec": 600 },
-    { "code": "F1",  "name": "建设路支线阀前", "from": "NT0",  "to": "NV1", "pMin": 0.20, "pMax": 0.45, "tolSec": 600 },
-    { "code": "F1D", "name": "建设路支线阀后", "from": "NV1",  "to": "NT1", "pMin": 0.20, "pMax": 0.45, "tolSec": 600 },
-    { "code": "S1",  "name": "S1 建设路支管",  "from": "NT1",  "to": "NE1", "pMin": 0.20, "pMax": 0.42, "tolSec": 600 },
-    { "code": "F2",  "name": "幸福路阀前连接", "from": "NT1",  "to": "NV2", "pMin": 0.22, "pMax": 0.45, "tolSec": 600 },
-    { "code": "S2",  "name": "S2 幸福路支管",  "from": "NV2",  "to": "NE2", "pMin": 0.22, "pMax": 0.45, "tolSec": 600 },
-    { "code": "F3",  "name": "滨河巷阀前连接", "from": "NT0",  "to": "NV3", "pMin": 0.18, "pMax": 0.40, "tolSec": 600 },
-    { "code": "S3",  "name": "S3 滨河巷支管",  "from": "NV3",  "to": "NE3", "pMin": 0.18, "pMax": 0.40, "tolSec": 600 }
+    {
+      "code": "M0",
+      "name": "干管 M0",
+      "from": "NSRC",
+      "to": "NT0",
+      "pMin": 0.2,
+      "pMax": 0.46,
+      "tolSec": 600,
+      "dn": 150,
+      "material": "DUCTILE_IRON",
+      "connectionType": "FLANGE",
+      "pn": 16
+    },
+    {
+      "code": "F1",
+      "name": "建设路支线阀前",
+      "from": "NT0",
+      "to": "NV1",
+      "pMin": 0.2,
+      "pMax": 0.45,
+      "tolSec": 600,
+      "dn": 100,
+      "material": "DUCTILE_IRON",
+      "connectionType": "FLANGE",
+      "pn": 16
+    },
+    {
+      "code": "F1D",
+      "name": "建设路支线阀后",
+      "from": "NV1",
+      "to": "NT1",
+      "pMin": 0.2,
+      "pMax": 0.45,
+      "tolSec": 600,
+      "dn": 100,
+      "material": "DUCTILE_IRON",
+      "connectionType": "FLANGE",
+      "pn": 16
+    },
+    {
+      "code": "S1",
+      "name": "S1 建设路支管",
+      "from": "NT1",
+      "to": "NE1",
+      "pMin": 0.2,
+      "pMax": 0.42,
+      "tolSec": 600,
+      "dn": 100,
+      "material": "DUCTILE_IRON",
+      "connectionType": "FLANGE",
+      "pn": 16
+    },
+    {
+      "code": "F2",
+      "name": "幸福路阀前连接",
+      "from": "NT1",
+      "to": "NV2",
+      "pMin": 0.22,
+      "pMax": 0.45,
+      "tolSec": 600,
+      "dn": 100,
+      "material": "DUCTILE_IRON",
+      "connectionType": "FLANGE",
+      "pn": 16
+    },
+    {
+      "code": "S2",
+      "name": "S2 幸福路支管",
+      "from": "NV2",
+      "to": "NE2",
+      "pMin": 0.22,
+      "pMax": 0.45,
+      "tolSec": 600,
+      "dn": 100,
+      "material": "DUCTILE_IRON",
+      "connectionType": "FLANGE",
+      "pn": 16
+    },
+    {
+      "code": "F3",
+      "name": "滨河巷阀前连接",
+      "from": "NT0",
+      "to": "NV3",
+      "pMin": 0.18,
+      "pMax": 0.4,
+      "tolSec": 600,
+      "dn": 80,
+      "material": "DUCTILE_IRON",
+      "connectionType": "FLANGE",
+      "pn": 10
+    },
+    {
+      "code": "S3",
+      "name": "S3 滨河巷支管",
+      "from": "NV3",
+      "to": "NE3",
+      "pMin": 0.18,
+      "pMax": 0.4,
+      "tolSec": 600,
+      "dn": 80,
+      "material": "DUCTILE_IRON",
+      "connectionType": "FLANGE",
+      "pn": 10
+    }
   ],
   "valves": [
-    { "code": "V1", "name": "V1 建设路支线大阀", "nodeCode": "NV1", "qualification": "Q_VALVE_LARGE", "permit": "POP-V1" },
-    { "code": "V2", "name": "V2 幸福路阀",       "nodeCode": "NV2", "qualification": "Q_VALVE_STD",   "permit": "POP-V2" },
-    { "code": "V3", "name": "V3 滨河巷阀",       "nodeCode": "NV3", "qualification": "Q_VALVE_STD",   "permit": "POP-V3" }
+    {
+      "code": "V1",
+      "name": "V1 建设路支线大阀",
+      "nodeCode": "NV1",
+      "qualification": "Q_VALVE_LARGE",
+      "permit": "POP-V1"
+    },
+    {
+      "code": "V2",
+      "name": "V2 幸福路阀",
+      "nodeCode": "NV2",
+      "qualification": "Q_VALVE_STD",
+      "permit": "POP-V2"
+    },
+    {
+      "code": "V3",
+      "name": "V3 滨河巷阀",
+      "nodeCode": "NV3",
+      "qualification": "Q_VALVE_STD",
+      "permit": "POP-V3"
+    }
   ],
   "addresses": [
-    { "code": "A01", "address": "幸福路1号",       "segment": "S2", "building": null,         "lng": 120.00251, "lat": 30.00102, "aliases": ["幸福路1号", "幸福路01号", "幸福路1号院"] },
-    { "code": "A02", "address": "幸福路3号",       "segment": "S2", "building": null,         "lng": 120.00254, "lat": 30.00110, "aliases": ["幸福路3号"] },
-    { "code": "A03", "address": "幸福路4号",       "segment": "S2", "building": null,         "lng": 120.00256, "lat": 30.00116, "aliases": ["幸福路4号"] },
-    { "code": "A04", "address": "幸福路5号幸福里6栋1单元", "segment": "S2", "building": "幸福里6栋", "lng": 120.00258, "lat": 30.00124, "aliases": ["幸福路5号", "幸福里6栋", "幸福里6栋1单元", "幸福里小区6栋1单元"] },
-    { "code": "A05", "address": "幸福路8号",       "segment": "S2", "building": "幸福里6栋", "lng": 120.00260, "lat": 30.00138, "aliases": ["幸福路8号", "幸福路尽头", "幸福路北口"] },
-
-    { "code": "A06", "address": "滨河巷1号",       "segment": "S3", "building": null,         "lng": 120.00262, "lat": 30.00136, "aliases": ["滨河巷1号"] },
-    { "code": "A07", "address": "滨河巷3号幸福里6栋2单元", "segment": "S3", "building": "幸福里6栋", "lng": 120.00266, "lat": 30.00133, "aliases": ["滨河巷3号", "幸福里6栋2单元", "幸福里小区6栋2单元", "幸福里6栋"] },
-    { "code": "A08", "address": "滨河巷5号",       "segment": "S3", "building": null,         "lng": 120.00268, "lat": 30.00128, "aliases": ["滨河巷5号"] },
-    { "code": "A09", "address": "滨河巷7号",       "segment": "S3", "building": null,         "lng": 120.00270, "lat": 30.00120, "aliases": ["滨河巷7号"] },
-
-    { "code": "A10", "address": "建设路1号",       "segment": "S1", "building": null, "lng": 120.0024, "lat": 30.00041, "aliases": ["建设路1号"] },
-    { "code": "A11", "address": "建设路3号",       "segment": "S1", "building": null, "lng": 120.0026, "lat": 30.00041, "aliases": ["建设路3号"] },
-    { "code": "A12", "address": "建设路5号",       "segment": "S1", "building": null, "lng": 120.0028, "lat": 30.00041, "aliases": ["建设路5号"] },
-    { "code": "A13", "address": "建设路7号",       "segment": "S1", "building": null, "lng": 120.00295, "lat": 30.00041, "aliases": ["建设路7号"] }
+    {
+      "code": "A01",
+      "address": "幸福路1号",
+      "segment": "S2",
+      "building": null,
+      "lng": 120.00251,
+      "lat": 30.00102,
+      "aliases": [
+        "幸福路1号",
+        "幸福路01号",
+        "幸福路1号院"
+      ]
+    },
+    {
+      "code": "A02",
+      "address": "幸福路3号",
+      "segment": "S2",
+      "building": null,
+      "lng": 120.00254,
+      "lat": 30.0011,
+      "aliases": [
+        "幸福路3号"
+      ]
+    },
+    {
+      "code": "A03",
+      "address": "幸福路4号",
+      "segment": "S2",
+      "building": null,
+      "lng": 120.00256,
+      "lat": 30.00116,
+      "aliases": [
+        "幸福路4号"
+      ]
+    },
+    {
+      "code": "A04",
+      "address": "幸福路5号幸福里6栋1单元",
+      "segment": "S2",
+      "building": "幸福里6栋",
+      "lng": 120.00258,
+      "lat": 30.00124,
+      "aliases": [
+        "幸福路5号",
+        "幸福里6栋",
+        "幸福里6栋1单元",
+        "幸福里小区6栋1单元"
+      ]
+    },
+    {
+      "code": "A05",
+      "address": "幸福路8号",
+      "segment": "S2",
+      "building": "幸福里6栋",
+      "lng": 120.0026,
+      "lat": 30.00138,
+      "aliases": [
+        "幸福路8号",
+        "幸福路尽头",
+        "幸福路北口"
+      ]
+    },
+    {
+      "code": "A06",
+      "address": "滨河巷1号",
+      "segment": "S3",
+      "building": null,
+      "lng": 120.00262,
+      "lat": 30.00136,
+      "aliases": [
+        "滨河巷1号"
+      ]
+    },
+    {
+      "code": "A07",
+      "address": "滨河巷3号幸福里6栋2单元",
+      "segment": "S3",
+      "building": "幸福里6栋",
+      "lng": 120.00266,
+      "lat": 30.00133,
+      "aliases": [
+        "滨河巷3号",
+        "幸福里6栋2单元",
+        "幸福里小区6栋2单元",
+        "幸福里6栋"
+      ]
+    },
+    {
+      "code": "A08",
+      "address": "滨河巷5号",
+      "segment": "S3",
+      "building": null,
+      "lng": 120.00268,
+      "lat": 30.00128,
+      "aliases": [
+        "滨河巷5号"
+      ]
+    },
+    {
+      "code": "A09",
+      "address": "滨河巷7号",
+      "segment": "S3",
+      "building": null,
+      "lng": 120.0027,
+      "lat": 30.0012,
+      "aliases": [
+        "滨河巷7号"
+      ]
+    },
+    {
+      "code": "A10",
+      "address": "建设路1号",
+      "segment": "S1",
+      "building": null,
+      "lng": 120.0024,
+      "lat": 30.00041,
+      "aliases": [
+        "建设路1号"
+      ]
+    },
+    {
+      "code": "A11",
+      "address": "建设路3号",
+      "segment": "S1",
+      "building": null,
+      "lng": 120.0026,
+      "lat": 30.00041,
+      "aliases": [
+        "建设路3号"
+      ]
+    },
+    {
+      "code": "A12",
+      "address": "建设路5号",
+      "segment": "S1",
+      "building": null,
+      "lng": 120.0028,
+      "lat": 30.00041,
+      "aliases": [
+        "建设路5号"
+      ]
+    },
+    {
+      "code": "A13",
+      "address": "建设路7号",
+      "segment": "S1",
+      "building": null,
+      "lng": 120.00295,
+      "lat": 30.00041,
+      "aliases": [
+        "建设路7号"
+      ]
+    }
   ],
   "landmarks": [
-    { "code": "LM-XF-BH", "name": "幸福路与滨河巷交叉口", "lng": 120.00261, "lat": 30.00137, "candidateSegments": ["S2", "S3"] }
+    {
+      "code": "LM-XF-BH",
+      "name": "幸福路与滨河巷交叉口",
+      "lng": 120.00261,
+      "lat": 30.00137,
+      "candidateSegments": [
+        "S2",
+        "S3"
+      ]
+    }
   ],
   "devices": [
-    { "deviceNo": "PDS2-01", "name": "幸福路支管压力计", "segment": "S2" },
-    { "deviceNo": "PDS3-01", "name": "滨河巷支管压力计", "segment": "S3" },
-    { "deviceNo": "PDS1-01", "name": "建设路支管压力计", "segment": "S1" }
+    {
+      "deviceNo": "PDS2-01",
+      "name": "幸福路支管压力计",
+      "segment": "S2"
+    },
+    {
+      "deviceNo": "PDS3-01",
+      "name": "滨河巷支管压力计",
+      "segment": "S3"
+    },
+    {
+      "deviceNo": "PDS1-01",
+      "name": "建设路支管压力计",
+      "segment": "S1"
+    }
   ],
   "readings": [
-    { "code": "PR-S2-FAIL", "deviceNo": "PDS2-01", "segment": "S2", "pressureMpa": 0.14, "sampledAt": "2026-11-26T06:49:10+08:00", "clockOffsetSeconds": 30, "note": "复压失败样例：压力低于 S2 正常下限 0.22" },
-    { "code": "PR-S2-OK",   "deviceNo": "PDS2-01", "segment": "S2", "pressureMpa": 0.31, "sampledAt": "2026-11-26T09:04:30+08:00", "clockOffsetSeconds": 30, "note": "重新派工后复压合格" },
-    { "code": "PR-S3-OK",   "deviceNo": "PDS3-01", "segment": "S3", "pressureMpa": 0.28, "sampledAt": "2026-11-26T11:09:50+08:00", "clockOffsetSeconds": 10, "note": "S3 复压合格" },
-    { "code": "PR-S2-PM",   "deviceNo": "PDS2-01", "segment": "S2", "pressureMpa": 0.30, "sampledAt": "2026-11-26T14:19:50+08:00", "clockOffsetSeconds": 10, "note": "更正后按 S2 复压合格" },
-    { "code": "PR-REV-S1",  "deviceNo": "PDS1-01", "segment": "S1", "pressureMpa": 0.33, "sampledAt": "2026-11-26T13:05:00+08:00", "clockOffsetSeconds": 0, "note": "压力复核证据：S1 压力始终正常" },
-    { "code": "PR-REV-S2",  "deviceNo": "PDS2-01", "segment": "S2", "pressureMpa": 0.15, "sampledAt": "2026-11-26T13:06:00+08:00", "clockOffsetSeconds": 20, "note": "压力复核证据：异常实际集中在 S2" },
-    { "code": "PR-TIME-BAD","deviceNo": "PDS2-01", "segment": "S2", "pressureMpa": 0.32, "sampledAt": "2026-11-26T05:30:00+08:00", "clockOffsetSeconds": 0, "note": "校时偏差/采样时刻远超容差的样例读数" }
+    {
+      "code": "PR-S2-FAIL",
+      "deviceNo": "PDS2-01",
+      "segment": "S2",
+      "pressureMpa": 0.14,
+      "sampledAt": "2026-11-26T06:49:10+08:00",
+      "clockOffsetSeconds": 30,
+      "note": "复压失败样例：压力低于 S2 正常下限 0.22"
+    },
+    {
+      "code": "PR-S2-OK",
+      "deviceNo": "PDS2-01",
+      "segment": "S2",
+      "pressureMpa": 0.31,
+      "sampledAt": "2026-11-26T09:04:30+08:00",
+      "clockOffsetSeconds": 30,
+      "note": "重新派工后复压合格"
+    },
+    {
+      "code": "PR-S3-OK",
+      "deviceNo": "PDS3-01",
+      "segment": "S3",
+      "pressureMpa": 0.28,
+      "sampledAt": "2026-11-26T11:09:50+08:00",
+      "clockOffsetSeconds": 10,
+      "note": "S3 复压合格"
+    },
+    {
+      "code": "PR-S2-PM",
+      "deviceNo": "PDS2-01",
+      "segment": "S2",
+      "pressureMpa": 0.3,
+      "sampledAt": "2026-11-26T14:19:50+08:00",
+      "clockOffsetSeconds": 10,
+      "note": "更正后按 S2 复压合格"
+    },
+    {
+      "code": "PR-REV-S1",
+      "deviceNo": "PDS1-01",
+      "segment": "S1",
+      "pressureMpa": 0.33,
+      "sampledAt": "2026-11-26T13:05:00+08:00",
+      "clockOffsetSeconds": 0,
+      "note": "压力复核证据：S1 压力始终正常"
+    },
+    {
+      "code": "PR-REV-S2",
+      "deviceNo": "PDS2-01",
+      "segment": "S2",
+      "pressureMpa": 0.15,
+      "sampledAt": "2026-11-26T13:06:00+08:00",
+      "clockOffsetSeconds": 20,
+      "note": "压力复核证据：异常实际集中在 S2"
+    },
+    {
+      "code": "PR-TIME-BAD",
+      "deviceNo": "PDS2-01",
+      "segment": "S2",
+      "pressureMpa": 0.32,
+      "sampledAt": "2026-11-26T05:30:00+08:00",
+      "clockOffsetSeconds": 0,
+      "note": "校时偏差/采样时刻远超容差的样例读数"
+    },
+    {
+      "code": "PR-M-S2-OK",
+      "deviceNo": "PDS2-01",
+      "segment": "S2",
+      "pressureMpa": 0.3,
+      "sampledAt": "2026-11-27T09:00:00+08:00",
+      "clockOffsetSeconds": 10,
+      "note": "材料回放 S2 工单复压合格"
+    },
+    {
+      "code": "PR-M-S3-OK",
+      "deviceNo": "PDS3-01",
+      "segment": "S3",
+      "pressureMpa": 0.28,
+      "sampledAt": "2026-11-27T11:16:00+08:00",
+      "clockOffsetSeconds": 10,
+      "note": "材料回放 S3 工单复压合格"
+    },
+    {
+      "code": "PR-M-S1-OK",
+      "deviceNo": "PDS1-01",
+      "segment": "S1",
+      "pressureMpa": 0.33,
+      "sampledAt": "2026-11-27T15:15:00+08:00",
+      "clockOffsetSeconds": 10,
+      "note": "材料回放 S1 工单复压合格"
+    },
+    {
+      "code": "PR-M-S2-EARLY",
+      "deviceNo": "PDS2-01",
+      "segment": "S2",
+      "pressureMpa": 0.3,
+      "sampledAt": "2026-11-27T13:40:00+08:00",
+      "clockOffsetSeconds": 10,
+      "note": "材料回放已装后召回工单复压合格"
+    }
   ]
 }

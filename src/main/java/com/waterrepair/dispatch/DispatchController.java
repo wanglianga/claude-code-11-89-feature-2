@@ -71,8 +71,8 @@ public class DispatchController {
     @Operation(summary = "下达 PROVISIONAL 暂留派工单")
     @Roles({"DISPATCHER"})
     @PostMapping("/api/assignments/{assignmentId}/issue")
-    public Assignment issue(@PathVariable Long assignmentId) {
-        return dispatchService.issue(assignmentId);
+    public Assignment issue(@PathVariable Long assignmentId, HttpServletRequest http) {
+        return dispatchService.issue(assignmentId, operator(http));
     }
 
     @Operation(summary = "完成/交接派工单并释放其资源占用（如勘查班确认阀门后交接）")

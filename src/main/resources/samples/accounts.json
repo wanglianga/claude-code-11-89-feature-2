@@ -1,8 +1,39 @@
 {
   "accounts": [
-    { "username": "dispatcher", "password": "Disp@12345", "displayName": "值班调度员", "role": "DISPATCHER", "crewCode": null },
-    { "username": "crewsole",   "password": "Crew@12345", "displayName": "维修三班班长", "role": "CREW", "crewCode": "C_SOLE" },
-    { "username": "scout",      "password": "Scout@12345", "displayName": "勘查一班组员", "role": "CREW", "crewCode": "C_SCOUT" },
-    { "username": "viewer",     "password": "View@12345", "displayName": "只读观察员", "role": "VIEWER", "crewCode": null }
+    {
+      "username": "dispatcher",
+      "password": "Disp@12345",
+      "displayName": "值班调度员",
+      "role": "DISPATCHER",
+      "crewCode": null
+    },
+    {
+      "username": "crewsole",
+      "password": "Crew@12345",
+      "displayName": "维修三班班长",
+      "role": "CREW",
+      "crewCode": "C_SOLE"
+    },
+    {
+      "username": "scout",
+      "password": "Scout@12345",
+      "displayName": "勘查一班组员",
+      "role": "CREW",
+      "crewCode": "C_SCOUT"
+    },
+    {
+      "username": "viewer",
+      "password": "View@12345",
+      "displayName": "只读观察员",
+      "role": "VIEWER",
+      "crewCode": null
+    },
+    {
+      "username": "warehouse",
+      "password": "Ware@12345",
+      "displayName": "中心仓库材料员",
+      "role": "WAREHOUSE",
+      "crewCode": null
+    }
   ]
 }

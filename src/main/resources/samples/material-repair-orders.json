@@ -1,0 +1,255 @@
+{
+  "_comment": "随题提供的两张维修单与召回数据。仓库对 DN100/PN16 与 DN80/PN10 均有足量合格批次；SEAL-DN100-PN16-Q1 为“配料后被召回”的密封件批次；PIPE-DN100-PN10-X 外形相似但压力等级不足。",
+  "pipePlanChange": {
+    "key": "M1",
+    "title": "幸福路 S2 支管抢修（原估 DN100/PN16，现场确认其中一处为 DN80/PN10）",
+    "report": {
+      "hotlineCallId": "HC-20261127-1001",
+      "callerPhone": "13900001001",
+      "rawAddress": "幸福路3号",
+      "description": "幸福路 S2 支管接口冲蚀漏水，维修方案原估 DN100/PN16，到场后确认其中一处为 DN80/PN10 老管段",
+      "receivedAt": "2026-11-27T08:00:00+08:00"
+    },
+    "boundary": [
+      "S2"
+    ],
+    "valveCodes": [
+      "V2"
+    ],
+    "windowStart": "2026-11-27T08:30:00+08:00",
+    "windowEnd": "2026-11-27T10:00:00+08:00",
+    "v1Lines": [
+      {
+        "lineNo": 1,
+        "category": "PIPE",
+        "dn": 100,
+        "material": "DUCTILE_IRON",
+        "connectionType": "FLANGE",
+        "pn": 16,
+        "quantity": 2,
+        "segmentCode": "S2",
+        "locationText": "幸福路3号 阀后 0+000~0+012"
+      },
+      {
+        "lineNo": 2,
+        "category": "SEAL",
+        "dn": 100,
+        "material": "EPDM",
+        "connectionType": "FLANGE",
+        "pn": 16,
+        "quantity": 2,
+        "segmentCode": "S2",
+        "locationText": "幸福路3号 阀法兰"
+      }
+    ],
+    "v2Lines": [
+      {
+        "lineNo": 1,
+        "category": "PIPE",
+        "dn": 100,
+        "material": "DUCTILE_IRON",
+        "connectionType": "FLANGE",
+        "pn": 16,
+        "quantity": 1,
+        "segmentCode": "S2",
+        "locationText": "幸福路3号 阀后 0+000~0+012"
+      },
+      {
+        "lineNo": 2,
+        "category": "PIPE",
+        "dn": 80,
+        "material": "DUCTILE_IRON",
+        "connectionType": "FLANGE",
+        "pn": 10,
+        "quantity": 2,
+        "segmentCode": "S2",
+        "locationText": "幸福路3号 东侧 0+012~0+020（现场实测 DN80/PN10）"
+      }
+    ],
+    "installs": [
+      {
+        "batchNo": "PIPE-DN100-PN16-Q1",
+        "qty": 1,
+        "lineNo": 1
+      },
+      {
+        "batchNo": "PIPE-DN80-PN10-Q1",
+        "qty": 2,
+        "lineNo": 2
+      }
+    ],
+    "reading": "PR-M-S2-OK",
+    "readingEventAt": "2026-11-27T09:00:00+08:00",
+    "receipts": {
+      "ARRIVAL": "2026-11-27T08:35:00+08:00",
+      "ISOLATION": "2026-11-27T08:40:00+08:00",
+      "REPAIR": "2026-11-27T08:55:00+08:00",
+      "FLUSH": "2026-11-27T09:05:00+08:00",
+      "REPRESSURE": "2026-11-27T09:10:00+08:00"
+    },
+    "preferredSealBatch": "SEAL-DN100-PN16-Q1"
+  },
+  "sealRecall": {
+    "key": "M2",
+    "title": "滨河巷 S3 支管密封件抢修（DN100 密封件批次已领料后被召回）",
+    "report": {
+      "hotlineCallId": "HC-20261127-1002",
+      "callerPhone": "13900001002",
+      "rawAddress": "滨河巷5号",
+      "description": "滨河巷 S3 支管法兰渗水，需更换 DN100/PN16 密封件",
+      "receivedAt": "2026-11-27T08:10:00+08:00"
+    },
+    "boundary": [
+      "S3"
+    ],
+    "valveCodes": [
+      "V3"
+    ],
+    "windowStart": "2026-11-27T10:30:00+08:00",
+    "windowEnd": "2026-11-27T12:00:00+08:00",
+    "lines": [
+      {
+        "lineNo": 1,
+        "category": "SEAL",
+        "dn": 100,
+        "material": "EPDM",
+        "connectionType": "FLANGE",
+        "pn": 16,
+        "quantity": 2,
+        "segmentCode": "S3",
+        "locationText": "滨河巷5号 阀后法兰"
+      }
+    ],
+    "plannedBatch": "SEAL-DN100-PN16-Q1",
+    "reading": "PR-M-S3-OK",
+    "readingEventAt": "2026-11-27T11:20:00+08:00",
+    "receipts": {
+      "ARRIVAL": "2026-11-27T10:35:00+08:00",
+      "ISOLATION": "2026-11-27T10:40:00+08:00",
+      "REPAIR": "2026-11-27T10:50:00+08:00",
+      "FLUSH": "2026-11-27T11:05:00+08:00",
+      "REPRESSURE": "2026-11-27T11:20:00+08:00"
+    }
+  },
+  "shortageProbe": {
+    "lines": [
+      {
+        "lineNo": 1,
+        "category": "PIPE",
+        "dn": 100,
+        "material": "DUCTILE_IRON",
+        "connectionType": "FLANGE",
+        "pn": 16,
+        "quantity": 30,
+        "segmentCode": "S2",
+        "locationText": "外形相似但压力等级不足库存探针"
+      }
+    ],
+    "expectNearMatchBatch": "PIPE-DN100-PN10-X"
+  },
+  "recall": {
+    "batchNo": "SEAL-DN100-PN16-Q1",
+    "kind": "QUALITY_RECALL",
+    "reason": "供应商质量召回：该批 DN100 EPDM 密封件复压后出现鼓泡，同批全数停用",
+    "publishedAt": "2026-11-27T08:30:00+08:00"
+  },
+  "recallFirst": {
+    "key": "M4",
+    "title": "建设路 S1 支管密封件抢修（召回先到：发车前即召回）",
+    "report": {
+      "hotlineCallId": "HC-20261127-1004",
+      "callerPhone": "13900001004",
+      "rawAddress": "建设路1号",
+      "description": "S1 支管法兰渗水，需 DN100/PN16 密封件；仓库配料后、班组发车前收到召回",
+      "receivedAt": "2026-11-27T14:10:00+08:00"
+    },
+    "boundary": [
+      "S1"
+    ],
+    "valveCodes": [
+      "V1"
+    ],
+    "windowStart": "2026-11-27T14:40:00+08:00",
+    "windowEnd": "2026-11-27T16:00:00+08:00",
+    "lines": [
+      {
+        "lineNo": 1,
+        "category": "SEAL",
+        "dn": 100,
+        "material": "EPDM",
+        "connectionType": "FLANGE",
+        "pn": 16,
+        "quantity": 2,
+        "segmentCode": "S1",
+        "locationText": "建设路1号 阀后法兰"
+      }
+    ],
+    "plannedBatch": "SEAL-DN100-PN16-Q3",
+    "replacementBatch": "SEAL-DN100-PN16-Q2",
+    "reading": "PR-M-S1-OK",
+    "readingBoundary": [
+      "S1"
+    ],
+    "receipts": {
+      "ARRIVAL": "2026-11-27T14:45:00+08:00",
+      "ISOLATION": "2026-11-27T14:50:00+08:00",
+      "REPAIR": "2026-11-27T15:00:00+08:00",
+      "FLUSH": "2026-11-27T15:10:00+08:00",
+      "REPRESSURE": "2026-11-27T15:20:00+08:00"
+    }
+  },
+  "recallFirstRecall": {
+    "batchNo": "SEAL-DN100-PN16-Q3",
+    "kind": "QUALITY_RECALL",
+    "reason": "供应商召回第二批：同产线 DN100 密封件复压鼓泡",
+    "publishedAt": "2026-11-27T14:20:00+08:00"
+  },
+  "installedRecall": {
+    "key": "M5",
+    "title": "幸福路 S2 支管密封件抢修（已安装后召回：追溯已装材料去向并替换）",
+    "report": {
+      "hotlineCallId": "HC-20261127-1005",
+      "callerPhone": "13900001005",
+      "rawAddress": "幸福路5号",
+      "description": "S2 支管法兰密封更换；装完后该批密封件被供应商召回",
+      "receivedAt": "2026-11-27T12:30:00+08:00"
+    },
+    "boundary": [
+      "S2"
+    ],
+    "valveCodes": [
+      "V2"
+    ],
+    "windowStart": "2026-11-27T13:00:00+08:00",
+    "windowEnd": "2026-11-27T14:00:00+08:00",
+    "lines": [
+      {
+        "lineNo": 1,
+        "category": "SEAL",
+        "dn": 100,
+        "material": "EPDM",
+        "connectionType": "FLANGE",
+        "pn": 16,
+        "quantity": 2,
+        "segmentCode": "S2",
+        "locationText": "幸福路5号 阀后法兰"
+      }
+    ],
+    "plannedBatch": "SEAL-DN100-PN16-Q4",
+    "reading": "PR-M-S2-EARLY",
+    "readingEventAt": "2026-11-27T13:40:00+08:00",
+    "receipts": {
+      "ARRIVAL": "2026-11-27T13:05:00+08:00",
+      "ISOLATION": "2026-11-27T13:08:00+08:00",
+      "REPAIR": "2026-11-27T13:15:00+08:00",
+      "FLUSH": "2026-11-27T13:25:00+08:00",
+      "REPRESSURE": "2026-11-27T13:40:00+08:00"
+    }
+  },
+  "installedRecallRecall": {
+    "batchNo": "SEAL-DN100-PN16-Q4",
+    "kind": "CERT_REVOCATION",
+    "reason": "供应商饮用水卫生认证被撤销：同批 DN100 EPDM 密封件停止使用",
+    "publishedAt": "2026-11-27T13:20:00+08:00"
+  }
+}

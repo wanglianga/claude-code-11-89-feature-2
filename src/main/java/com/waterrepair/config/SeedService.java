@@ -12,6 +12,8 @@ import com.waterrepair.crew.ToolItem;
 import com.waterrepair.crew.ToolItemRepository;
 import com.waterrepair.crew.Vehicle;
 import com.waterrepair.crew.VehicleRepository;
+import com.waterrepair.material.MaterialBatch;
+import com.waterrepair.material.MaterialBatchRepository;
 import com.waterrepair.network.AddressPoint;
 import com.waterrepair.network.AddressPointRepository;
 import com.waterrepair.network.GeoLandmark;
@@ -32,6 +34,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.InputStream;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -58,6 +61,7 @@ public class SeedService {
     private final VehicleRepository vehicleRepo;
     private final ToolItemRepository toolRepo;
     private final OperationPermitRepository permitRepo;
+    private final MaterialBatchRepository batchRepo;
 
     public SeedService(ObjectMapper objectMapper, JdbcTemplate jdbcTemplate, AuthService authService,
                        UserAccountRepository userRepo, NetworkNodeRepository nodeRepo,
@@ -65,7 +69,8 @@ public class SeedService {
                        AddressPointRepository addressRepo, GeoLandmarkRepository landmarkRepo,
                        PressureDeviceRepository deviceRepo, PressureReadingRepository readingRepo,
                        CrewRepository crewRepo, VehicleRepository vehicleRepo,
-                       ToolItemRepository toolRepo, OperationPermitRepository permitRepo) {
+                       ToolItemRepository toolRepo, OperationPermitRepository permitRepo,
+                       MaterialBatchRepository batchRepo) {
         this.objectMapper = objectMapper;
         this.jdbcTemplate = jdbcTemplate;
         this.authService = authService;
@@ -81,6 +86,7 @@ public class SeedService {
         this.vehicleRepo = vehicleRepo;
         this.toolRepo = toolRepo;
         this.permitRepo = permitRepo;
+        this.batchRepo = batchRepo;
     }
 
     @Transactional
@@ -110,8 +116,10 @@ public class SeedService {
             nodeRepo.save(new NetworkNode(n.code(), n.name(), n.type(), n.lng(), n.lat()));
         }
         for (SeedDtos.SegmentDto s : network.segments()) {
-            segmentRepo.save(new PipeSegment(s.code(), s.name(), s.from(), s.to(),
-                    s.pMin(), s.pMax(), s.tolSec()));
+            PipeSegment segment = new PipeSegment(s.code(), s.name(), s.from(), s.to(),
+                    s.pMin(), s.pMax(), s.tolSec());
+            segment.setDesignSpec(s.dn(), s.material(), s.connectionType(), s.pn());
+            segmentRepo.save(segment);
         }
         for (SeedDtos.ValveDto v : network.valves()) {
             valveRepo.save(new ValveSpec(v.code(), v.name(), v.nodeCode(),
@@ -153,11 +161,27 @@ public class SeedService {
                     c.primaryVehicleCode(), c.qualificationCodes(), c.standardToolCodes()));
         }
 
+        SeedDtos.MaterialsSeed materials = readJson("samples/materials.json", SeedDtos.MaterialsSeed.class);
+        for (SeedDtos.BatchDto b : materials.batches()) {
+            batchRepo.save(new MaterialBatch(b.batchNo(), b.category(), b.dn(), b.material(),
+                    b.connectionType(), b.pn(), b.quantity(), b.supplierCode(),
+                    supplierName(materials, b.supplierCode()), b.manufacturer(), b.certNo(),
+                    b.certExpiry() == null || b.certExpiry().isBlank() ? null : LocalDate.parse(b.certExpiry()),
+                    "WH-MAIN", b.shelfLocation()));
+        }
+
         SeedDtos.AccountsSeed accounts = readJson("samples/accounts.json", SeedDtos.AccountsSeed.class);
         for (SeedDtos.AccountDto a : accounts.accounts()) {
             userRepo.save(new UserAccount(a.username(), authService.encode(a.password()),
                     a.displayName(), a.role(), a.crewCode()));
         }
+    }
+
+    private String supplierName(SeedDtos.MaterialsSeed materials, String supplierCode) {
+        return materials.suppliers().stream()
+                .filter(sp -> sp.code().equals(supplierCode))
+                .map(SeedDtos.SupplierDto::name)
+                .findFirst().orElse(supplierCode);
     }
 
     private <T> T readJson(String path, Class<T> type) {
@@ -183,6 +207,7 @@ public class SeedService {
         m.put("vehicles", vehicleRepo.count());
         m.put("tools", toolRepo.count());
         m.put("permits", permitRepo.count());
+        m.put("materialBatches", batchRepo.count());
         return m;
     }
 }

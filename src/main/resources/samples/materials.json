@@ -1,0 +1,190 @@
+{
+  "_comment": "随题提供的仓库合格批次库存与供应商台账。SEAL-DN100-PN16-Q1/Q3/Q4 为回放中被召回的批次；PIPE-DN100-PN10-X 为外形相似但压力等级不足的库存件，任何 PN16 需求都不得以它替代。",
+  "suppliers": [
+    {
+      "code": "SUP-A",
+      "name": "城投管材一厂",
+      "certAuthority": "省疾控中心"
+    },
+    {
+      "code": "SUP-B",
+      "name": "江南密封件公司",
+      "certAuthority": "市卫生监督所"
+    },
+    {
+      "code": "SUP-C",
+      "name": "西部铸管集团",
+      "certAuthority": "省疾控中心"
+    }
+  ],
+  "batches": [
+    {
+      "batchNo": "PIPE-DN100-PN16-Q1",
+      "category": "PIPE",
+      "dn": 100,
+      "material": "DUCTILE_IRON",
+      "connectionType": "FLANGE",
+      "pn": 16,
+      "quantity": 12,
+      "supplierCode": "SUP-A",
+      "manufacturer": "城投管材一厂",
+      "certNo": "WSC-2028-1001",
+      "certExpiry": "2028-06-30",
+      "shelfLocation": "A-01-01"
+    },
+    {
+      "batchNo": "PIPE-DN100-PN16-Q2",
+      "category": "PIPE",
+      "dn": 100,
+      "material": "DUCTILE_IRON",
+      "connectionType": "FLANGE",
+      "pn": 16,
+      "quantity": 8,
+      "supplierCode": "SUP-A",
+      "manufacturer": "城投管材一厂",
+      "certNo": "WSC-2028-1002",
+      "certExpiry": "2028-06-30",
+      "shelfLocation": "A-01-02"
+    },
+    {
+      "batchNo": "PIPE-DN100-PN10-X",
+      "category": "PIPE",
+      "dn": 100,
+      "material": "DUCTILE_IRON",
+      "connectionType": "FLANGE",
+      "pn": 10,
+      "quantity": 30,
+      "supplierCode": "SUP-C",
+      "manufacturer": "西部铸管集团",
+      "certNo": "WSC-2029-2001",
+      "certExpiry": "2029-03-31",
+      "shelfLocation": "A-02-01"
+    },
+    {
+      "batchNo": "PIPE-DN80-PN10-Q1",
+      "category": "PIPE",
+      "dn": 80,
+      "material": "DUCTILE_IRON",
+      "connectionType": "FLANGE",
+      "pn": 10,
+      "quantity": 14,
+      "supplierCode": "SUP-C",
+      "manufacturer": "西部铸管集团",
+      "certNo": "WSC-2029-2002",
+      "certExpiry": "2029-03-31",
+      "shelfLocation": "B-01-01"
+    },
+    {
+      "batchNo": "PIPE-DN80-PN16-Q1",
+      "category": "PIPE",
+      "dn": 80,
+      "material": "DUCTILE_IRON",
+      "connectionType": "FLANGE",
+      "pn": 16,
+      "quantity": 6,
+      "supplierCode": "SUP-A",
+      "manufacturer": "城投管材一厂",
+      "certNo": "WSC-2028-1003",
+      "certExpiry": "2028-06-30",
+      "shelfLocation": "B-01-02"
+    },
+    {
+      "batchNo": "SEAL-DN100-PN16-Q1",
+      "category": "SEAL",
+      "dn": 100,
+      "material": "EPDM",
+      "connectionType": "FLANGE",
+      "pn": 16,
+      "quantity": 24,
+      "supplierCode": "SUP-B",
+      "manufacturer": "江南密封件公司",
+      "certNo": "WS-CERT-2027-5501",
+      "certExpiry": "2027-12-31",
+      "shelfLocation": "C-03-01"
+    },
+    {
+      "batchNo": "SEAL-DN100-PN16-Q2",
+      "category": "SEAL",
+      "dn": 100,
+      "material": "EPDM",
+      "connectionType": "FLANGE",
+      "pn": 16,
+      "quantity": 20,
+      "supplierCode": "SUP-B",
+      "manufacturer": "江南密封件公司",
+      "certNo": "WS-CERT-2027-5502",
+      "certExpiry": "2027-12-31",
+      "shelfLocation": "C-03-02"
+    },
+    {
+      "batchNo": "SEAL-DN80-PN10-Q1",
+      "category": "SEAL",
+      "dn": 80,
+      "material": "EPDM",
+      "connectionType": "FLANGE",
+      "pn": 10,
+      "quantity": 30,
+      "supplierCode": "SUP-B",
+      "manufacturer": "江南密封件公司",
+      "certNo": "WS-CERT-2027-5503",
+      "certExpiry": "2027-12-31",
+      "shelfLocation": "C-02-01"
+    },
+    {
+      "batchNo": "SEAL-DN80-PN16-Q1",
+      "category": "SEAL",
+      "dn": 80,
+      "material": "EPDM",
+      "connectionType": "FLANGE",
+      "pn": 16,
+      "quantity": 10,
+      "supplierCode": "SUP-B",
+      "manufacturer": "江南密封件公司",
+      "certNo": "WS-CERT-2027-5504",
+      "certExpiry": "2027-12-31",
+      "shelfLocation": "C-02-02"
+    },
+    {
+      "batchNo": "SEAL-DN100-PN16-Q3",
+      "category": "SEAL",
+      "dn": 100,
+      "material": "EPDM",
+      "connectionType": "FLANGE",
+      "pn": 16,
+      "quantity": 6,
+      "supplierCode": "SUP-B",
+      "manufacturer": "江南密封件公司",
+      "certNo": "WS-CERT-2027-5505",
+      "certExpiry": "2027-12-31",
+      "shelfLocation": "C-03-03"
+    },
+    {
+      "batchNo": "SEAL-DN100-PN16-Q4",
+      "category": "SEAL",
+      "dn": 100,
+      "material": "EPDM",
+      "connectionType": "FLANGE",
+      "pn": 16,
+      "quantity": 8,
+      "supplierCode": "SUP-B",
+      "manufacturer": "江南密封件公司",
+      "certNo": "WS-CERT-2027-5506",
+      "certExpiry": "2027-12-31",
+      "shelfLocation": "C-03-04"
+    },
+    {
+      "batchNo": "SEAL-DN100-PN16-Q5",
+      "category": "SEAL",
+      "dn": 100,
+      "material": "EPDM",
+      "connectionType": "FLANGE",
+      "pn": 16,
+      "quantity": 4,
+      "supplierCode": "SUP-B",
+      "manufacturer": "江南密封件公司",
+      "certNo": "WS-CERT-2027-5507",
+      "certExpiry": "2027-12-31",
+      "shelfLocation": "C-03-05"
+    }
+  ]
+}

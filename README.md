@@ -4,8 +4,9 @@
 本项目用 **Java 21 / Spring Boot 3.5 / PostgreSQL** 实现了一个真实可调用的后端服务，
 覆盖：报修原文与归属判断、事故确认、图算法候选关阀组合与精确地址影响集合、
 班组许可/当班窗口/车辆/工具校验、队伍与阀门操作许可的并发互斥、两种稀缺队伍调度路线、
-五类现场回执的顺序约束、复压区间+校时容差核验、复压失败重新派工，以及压力复核推翻后的
-范围/资源占用/通知全链路更正。
+五类现场回执的顺序约束、复压区间+校时容差核验、复压失败重新派工，压力复核推翻后的
+范围/资源占用/通知全链路更正；以及**维修方案材料需求 → 仓库配料 → 现场扫码 → 竣工验收 → 召回追溯**
+的完整材料闭环（两种配料粒度、批次冻结/召回、已用材料去向追溯）。
 
 > 项目类型：**后端 API 服务**。自带 OpenAPI 3 文档与 Swagger UI，无独立前端页面。
 
@@ -62,6 +63,7 @@ DB_URL='jdbc:postgresql://HOST:5432/DBNAME' DB_USER=u DB_PASSWORD=p \
 | `dispatcher` | `Disp@12345` | DISPATCHER | 值班调度员，全部写操作（受理/确认/派工/复核/关单/reset） |
 | `crewsole` | `Crew@12345` | CREW（绑定 `C_SOLE`） | 唯一资质装备齐备的持证维修班班长，可提交回执 |
 | `scout` | `Scout@12345` | CREW（绑定 `C_SCOUT`） | 勘查一班 |
+| `warehouse` | `Ware@12345` | WAREHOUSE | 中心仓库材料员，配料/重做配料/发料/退回/召回/冻结/验收 |
 | `viewer` | `View@12345` | VIEWER | 只读角色，写接口返回 403 |
 
 登录换取 token：
@@ -104,12 +106,14 @@ BASE_URL=http://localhost:8080 python3 scripts/replay.py
 
 ```
 ##############################################################################
-# 回放断言结果：PASS=114  FAIL=0
-# 🎉 全部场景断言通过：同段重拨 / 相邻双支管 / 并发互斥 / 复压重派 / 更正链
+# 回放断言结果：PASS=214  FAIL=0
+# 🎉 全部场景断言通过：同段重拨 / 相邻双支管 / 并发互斥 / 复压重派 / 更正链 / 材料配料与召回追溯
 ALL_DONE: true
 ```
 
 `scripts/replay.py` 覆盖并核对：
+
+> 材料/仓库场景位于第 15–20 节，使用 `warehouse/Ware@12345` 登录；样例工单日为 `2026-11-27`。
 
 1. **同段重拨**：R1/R2 形成 I2 后，R3 热线重拨自动作为 `REDIAL` 来源挂入同一事故；
    事故数、派工数均不增加；重复追加来源幂等。
@@ -146,13 +150,32 @@ ALL_DONE: true
    取消通知用 `replacesNotificationId` 链回旧通知——旧通知不删除、不伪装未发生。
 10. **校时容差**：`POST /api/pressure/verify-repressure` 可分别判定
     “压力值超出支管区间”和“校时后采样时刻与复压时刻偏差超过容差”。
-11. 终态：所有 `resource_occupancy` 均为 `RELEASED`，3 个事故均 `CLOSED`。
+11. **材料需求与缺料**：维修方案把口径/材质/连接方式/额定压力传给仓库；需求 PN16 但仓库只有
+    同系列 PN10 时返回 `409 MATERIAL_SHORTAGE` 并列出近似件的不符项，绝不用近似件顶替。
+12. **两张维修单 + 方案变更**：M1 原估 DN100/PN16（BATCH 粒度获批即锁具体批次），现场确认一处为
+    DN80/PN10 后下发方案 v2：旧配料单 `REPLACED`、旧件锁定释放，新配料单改为 DN100×1 + DN80/PN10×2。
+    另用 CATEGORY 粒度跑同场景对照：获批时只锁参数类别（无具体批次），装车前才按当时合格库存挑批次。
+13. **三种召回/变更顺序**：
+    - *方案变更先到*：M1 方案 v2 释放旧件、重做配料（BATCH 两张配料单；CATEGORY 只改参数类别）。
+    - *召回先到*：M4 配料后、发车前 DN100 密封件批次被召回 → 旧配料单释放并自动重做（旧单 REPLACED），发车批次不含召回件，
+      风险清单无已领/已装记录。
+    - *已领料后召回*：M2 已领未装 2 件，召回后 `issuableQty=0` 且拒绝再领用；已领未装件扫码退回（回库仍不可发）；
+      仓库显式重做配料换用合格批次后才安装，验收依据只含新批次。
+    - *已安装后召回*：M5 验收已把 Q4 关联到 S2；认证撤销后风险清单可定位 M5/ASG/S2/2 件/安装扫码/验收 id；
+      用合格批次替换安装（旧安装保留并标 `remediatedByScanId`，归入“已整改”），二次验收以替换后的在役批次为准。
+14. **冻结与不可发**：冻结批次 `issuableQty=0`、重复冻结 409、再领用被 `409 BATCH_NOT_ISSUABLE` 拒；
+    冻结最末 PN16 批次后 PN16 需求缺料（不降级 PN10）。
+15. **验收门槛**：已安装材料却未验收 → 关单 `409 MATERIAL_ACCEPTANCE_REQUIRED`；
+    验收后又有替换安装 → 关单 `409 MATERIAL_REACCEPTANCE_REQUIRED`。
+16. **恢复后旧批次核查**：所有 `issuableQty>0` 的批次必为 `QUALIFIED`；召回/冻结批次即使回库也保持 `issuableQty=0`。
+17. 终态：所有 `resource_occupancy` 均为 `RELEASED`，全部事故/材料工单均 `CLOSED`。
 
 ---
 
 ## 4. 手工 API 走查（核心端点）
 
-所有写接口都需要调度员 token。完整 schema 见 Swagger UI。
+写接口按角色鉴权：调度类用 `dispatcher`，配料/发料/召回/冻结用 `warehouse`，
+现场回执/扫码安装可用 `crewsole` 或 `dispatcher`。完整 schema 见 Swagger UI。
 
 ```bash
 B=http://localhost:8080
@@ -193,8 +216,38 @@ curl -s -X POST $B/api/incidents/1/dispatch/repair -H "$H" -H "$J" -d '{
 curl -s -X POST $B/api/incidents/1/receipts -H "$H" -H "$J" -d '{
   "assignmentId":1,"type":"ARRIVAL","eventAt":"2026-11-26T05:05:00+08:00","note":"到场"}'
 
-# 事故全状态聚合（核对来源/判断/方案/通知/更正/派工/占用/回执）
+# 事故全状态聚合（核对来源/判断/方案/通知/更正/派工/占用/回执/材料）
 curl -s $B/api/incidents/1 -H "$H" | python3 -m json.tool
+
+# ---------------- 材料：方案需求 → 配料 → 扫码 → 验收 → 召回 ----------------
+WH=$(curl -s -X POST $B/api/auth/login -H "$J" \
+  -d '{"username":"warehouse","password":"Ware@12345"}' \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
+WHH="Authorization: Bearer $WH"
+
+curl -s $B/api/materials/batches -H "$WHH" | python3 -m json.tool   # issuableQty/paramKey
+
+# 维修方案（口径/材质/连接/额定压力 → 仓库配料；BATCH 立即锁批次）
+curl -s -X POST $B/api/incidents/1/repair-plans -H "$H" -H "$J" -d '{
+ "granularity":"BATCH","approve":true,
+ "lines":[{"lineNo":1,"category":"PIPE","dn":100,"material":"DUCTILE_IRON",
+           "connectionType":"FLANGE","pn":16,"quantity":2,"segmentCode":"S2",
+           "locationText":"幸福路3号阀后"}]}'
+
+curl -s $B/api/incidents/1/material-provision -H "$WHH"      # 锁定批次/reveal
+curl -s -X POST $B/api/incidents/1/material-scans/issue -H "$WHH" -H "$J" \
+  -d '{"items":[{"batchNo":"PIPE-DN100-PN16-Q1","qty":1,"lineNo":1,"segmentCode":"S2"}]}'
+# 安装扫码由现场班组/调度提交（仓库账号无安装权限）
+curl -s -X POST $B/api/incidents/1/material-scans/install -H "$H" -H "$J" -d '{
+ "item":{"batchNo":"PIPE-DN100-PN16-Q1","qty":1,"lineNo":1,"segmentCode":"S2","locationText":"S2 0+003"}}'
+
+# 供应商召回：立即不可发，并返回在库/已领未装/已安装去向
+curl -s -X POST $B/api/materials/recalls -H "$WHH" -H "$J" -d '{
+ "batchNo":"SEAL-DN100-PN16-Q1","kind":"QUALITY_RECALL","reason":"同批复压鼓泡"}'
+curl -s $B/api/materials/batches/SEAL-DN100-PN16-Q1/risk -H "$WHH" | python3 -m json.tool
+
+# 竣工验收（批次×管段×数量×证书×安装扫码）
+curl -s -X POST $B/api/incidents/1/material-acceptance -H "$H" -H "$J" -d '{}'
 ```
 
 主要资源分组（Swagger Tag 与之一致）：
@@ -207,6 +260,7 @@ curl -s $B/api/incidents/1 -H "$H" | python3 -m json.tool
 | 04 事故/方案/通知/复核 | `POST /api/incidents`、`/isolation-plans`、`/notify`、`/pressure-reviews`、`GET /{id}` |
 | 05 派工与互斥 | `/dispatch/scout`、`/dispatch/repair`、`/redispatch`、`/api/assignments/{id}/cancel|complete|issue` |
 | 06 回执与复压 | `POST /api/incidents/{id}/receipts`、`/close`、`POST /api/pressure/verify-repressure` |
+| 07 材料与仓库 | `/api/incidents/{id}/repair-plans`、`/material-provision`、`/material-scans/*`、`/material-acceptance`；`/api/materials/batches`、`/api/materials/recalls` |
 | 00 回放支持 | `POST /api/admin/reset` |
 
 ---
@@ -265,6 +319,57 @@ NSRC ─ M0 ─ NT0 ─ F1 ─ NV1(V1) ─ F1D ─ NT1 ─ S1 ─ NE1   地址 A
   事故边界更新、地址集合 diff、阀门操作票“释放旧票/新占新票”（新票冲突则整体回滚）、
   旧通知 `SUPERSEDED` + 更正/取消通知链、`CorrectionRecord` 留全量快照。
 
+### 5.5 材料：需求 → 配料 → 扫码 → 验收 → 召回追溯（`material/`）
+
+随题样例仓库：`src/main/resources/samples/materials.json`（合格批次库存与供应商台账）。
+两张维修单与召回数据：`src/main/resources/samples/material-repair-orders.json`
+（M1 现场改口径、M2 已领料后召回、M4 召回先到、M5 已安装后认证撤销、缺料探针）。
+
+**需求来源**：`POST /api/incidents/{id}/repair-plans` 把维修方案计算出的
+`category/dn/material/connectionType/pn/quantity/segmentCode`（安装管段）作为需求行传给仓库。
+每次现场改口径/改材质都新增方案版本；旧方案 `SUPERSEDED`，旧配料单释放并保留。
+
+**等价判定（硬约束）**：口径、材质、连接方式必须完全一致，额定压力只允许“不低于需求”。
+因此 `DN100/PN10` 不是 `DN100/PN16` 的等价件——缺料返回 `409 MATERIAL_SHORTAGE`，
+`details.nearMatches` 列出所有同系列近似件及其不符项（含“PN10 低于需求 PN16”），
+**绝不自动顶替**。
+
+**两种配料粒度**（`granularity`）：
+
+| 粒度 | 何时锁定 | 换料/退回 | 适用 |
+| --- | --- | --- | --- |
+| `BATCH` | 方案获批即锁具体合格批次（可 `preferredBatchNo` 指定），扣减 `quantityLocked` | 方案变更/批次召回 → 释放旧件（未发部分退回可用量）、旧配料 `REPLACED`，重做新配料 | 发车时物料确定、追责直接 |
+| `CATEGORY` | 获批时只校验“满足参数的材料类别”有货，不落批次 | 装车前（派工/暂缓单下达）按**当时**合格库存挑具体批次；发料时再重验数量、证书、批次状态 | 现场变更更灵活 |
+
+**现场扫码**（`/material-scans/{issue|return|install}`）：领用按具体批次、记录 `segmentCode` 安装位置；
+退回回补 `quantityOnHand`；安装可带 `replacesScanId` 以合格批次替换旧安装，旧安装保留并回填
+`remediatedByScanId`（归入“已整改”，历史不删除）。领用时若批次 `FROZEN/RECALLED/证书失效`，
+直接 `409 BATCH_NOT_ISSUABLE`。
+
+**批次状态机**：`QUALIFIED → FROZEN`（仓库冻结）/ `RECALLED`（供应商质量召回或饮用水认证撤销，
+`CERT_REVOCATION` 同时置 `certStatus=REVOKED`）。`issuableQty = qualified ? onHand - locked : 0`；
+召回/冻结批次即使退回回库也保持 `issuableQty=0`。冻结/召回会 `BLOCK` 相关分配、退回未发锁定量；
+未领料的 BATCH 配料自动重做；已领/已装的保留扫码历史并置 `NEEDS_REPLACEMENT`，交现场退回/替换。
+
+**召回风险清单** `GET /api/materials/batches/{batchNo}/risk`（或召回接口直接返回）：
+- `inWarehouse`：仍在库数量、已锁定、已退回、`issuableQty`（召回后为 0）、状态与原因；
+- `issuedNotInstalled`：已领未装（工单/派工单/班组/管段/位置/数量）；
+- `installed` / `remediated`：已安装（管段、位置、安装扫码、验收 id、证书）与已被替换整改的旧安装。
+
+**竣工验收** `POST /api/incidents/{id}/material-acceptance`：把当前有效安装扫码的批次按
+管段/位置/数量/证书写成 `AcceptanceItem`，即“验收依据”，供召回后反查“已安装材料的具体去向”。
+有安装却未验收 → 关单 `409 MATERIAL_ACCEPTANCE_REQUIRED`；验收后又发生安装/替换 →
+`409 MATERIAL_REACCEPTANCE_REQUIRED`（需重新验收）。
+
+**三种顺序 × 两种粒度对比**（回放第 15–20b 节，逐步断言）：
+
+| 场景 | BATCH 粒度 | CATEGORY 粒度 |
+| --- | --- | --- |
+| 方案变更先到（M1：DN100→DN80/PN10） | 旧配料 `REPLACED`、旧件锁定退回；v2 重锁 DN100×1 + DN80/PN10×2 | v1 无具体批次、无需退回；v2 只改参数类别，装车时挑批次 |
+| 召回先到（M4） | 未领料 → 释放旧配料并自动重做，发车批次不含召回件 | 召回作废已挑批次，置 `NEEDS_REPLACEMENT`，装车前重挑 |
+| 已领料后召回（M2） | 已领未装退回（回库仍不可发）→ 仓库显式重做 → 安装合格批次 | 发料时重验会选中当时合格批次，旧批次拒绝出库 |
+| 已安装后召回（M5） | 已装去向可查（工单/管段/验收 id）→ 合格批次替换安装 → 二次验收 | 同上；替换后旧安装归入“已整改” |
+
 ---
 
 ## 6. 本地开发与验证方式（实际执行记录）
@@ -274,18 +379,19 @@ NSRC ─ M0 ─ NT0 ─ F1 ─ NV1(V1) ─ F1D ─ NT1 ─ S1 ─ NE1   地址 A
 | 验证 | 命令 | 实际结果 |
 | --- | --- | --- |
 | 编译 | `JAVA_HOME=/opt/jdk-25 /opt/maven/bin/mvn -s settings.xml compile` | BUILD SUCCESS |
-| 单元测试 | `... mvn -s settings.xml test` | `ImpactServiceTest` Tests run: 4, Failures: 0, Errors: 0 |
-| 打包 | `... mvn -s settings.xml -DskipTests package` | 生成 `target/water-repair-service.jar`（约 57 MB fat jar） |
+| 单元测试 | `... mvn -s settings.xml test` | `ImpactServiceTest` 4 项 + `MaterialEquivalenceTest` 4 项，Tests run: 8, Failures: 0, Errors: 0 |
+| 打包 | `... mvn -s settings.xml package` | 生成 `target/water-repair-service.jar`（约 57 MB fat jar，测试全过） |
 | 真实运行 | `/opt/jdk-25/bin/java -jar target/water-repair-service.jar` | 8080 启动成功，Hibernate 连 PostgreSQL 18.1 建表/播种，日志无 ERROR |
-| 端到端回放 | `python3 scripts/replay.py` | `PASS=114 FAIL=0`，并连续重复 4 次结果一致（含真实双线程并发派单） |
-| 接口文档 | `GET /v3/api-docs`、`/swagger-ui/index.html` | 均 200，OpenAPI 含全部 `/api/**` 路径 |
+| 端到端回放 | `python3 scripts/replay.py` | `PASS=214 FAIL=0`，连续重复执行结果一致（含真实双线程并发派单与材料召回场景） |
+| 接口文档 | `GET /v3/api-docs`、`/swagger-ui/index.html` | 均 200，OpenAPI 含全部 `/api/**` 路径（含材料/仓库端点） |
 
 说明与限制（如实记录）：
 
 - 当前容器**未安装 Docker**，因此 `docker compose up --build` 未能在本机实际执行；
   `Dockerfile`（多阶段 Maven 21 构建 + JRE 21 运行）与 `docker-compose.yml`
   （`postgres:18-alpine` + 健康检查 + 依赖编排）已按标准方式提供，需在有 Docker 的环境验收。
-- 回放使用显式 ISO 时间（样例事故日 `2026-11-26`，时区 `+08:00`），不依赖系统时钟，可重复。
+- 回放使用显式 ISO 时间（抢修样例事故日 `2026-11-26`、材料样例工单日 `2026-11-27`，时区 `+08:00`），不依赖系统时钟，可重复。
+- 材料批次的证书有效期按“当天”判定（样例证书 2027–2029 年到期，回放日 2026-11-27 均有效）。
 - 短信通道为 `SIMULATED_SMS`：通知落库并在接口/聚合详情中可查，不接真实短信网关。
 
 ---
@@ -294,9 +400,9 @@ NSRC ─ M0 ─ NT0 ─ F1 ─ NV1(V1) ─ F1D ─ NT1 ─ S1 ─ NE1   地址 A
 
 ```
 pom.xml / settings.xml / Dockerfile / docker-compose.yml
-scripts/replay.py                 # 114 断言的端到端回放（纯标准库）
+scripts/replay.py                 # 214 断言的端到端回放（纯标准库）
 src/main/resources/application.yml
-src/main/resources/samples/       # 随题提供的管网/班组/账号/报修/回执样本
+src/main/resources/samples/       # 随题提供的管网/班组/账号/报修/回执/材料批次/维修单样本
 src/main/java/com/waterrepair/
   auth/        账号、登录 token、角色拦截
   common/      统一异常、健康检查、首页跳转
@@ -307,5 +413,7 @@ src/main/java/com/waterrepair/
   crew/        班组/车辆/工具/阀门操作许可
   dispatch/    派工单 + 资源占用 + 行锁互斥 + 资格校验
   receipt/     五类顺序回执 + 复压核验
+  material/    维修方案材料需求/配料(两种粒度)/扫码/验收/冻结召回与风险清单
 src/test/java/com/waterrepair/network/ImpactServiceTest.java
+src/test/java/com/waterrepair/material/MaterialEquivalenceTest.java
 ```

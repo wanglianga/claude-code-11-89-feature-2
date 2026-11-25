@@ -22,7 +22,8 @@ public final class SeedDtos {
     }
 
     public record SegmentDto(String code, String name, String from, String to,
-                             Double pMin, Double pMax, Integer tolSec) {
+                             Double pMin, Double pMax, Integer tolSec,
+                             Integer dn, String material, String connectionType, Integer pn) {
     }
 
     public record ValveDto(String code, String name, String nodeCode,
@@ -70,5 +71,17 @@ public final class SeedDtos {
 
     public record AccountDto(String username, String password, String displayName,
                              String role, String crewCode) {
+    }
+
+    public record MaterialsSeed(List<SupplierDto> suppliers, List<BatchDto> batches) {
+    }
+
+    public record SupplierDto(String code, String name, String certAuthority) {
+    }
+
+    public record BatchDto(String batchNo, String category, Integer dn, String material,
+                           String connectionType, Integer pn, Integer quantity,
+                           String supplierCode, String manufacturer, String certNo,
+                           String certExpiry, String shelfLocation) {
     }
 }
